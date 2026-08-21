@@ -231,6 +231,14 @@ curl -sS http://localhost:8080/api/v1/channel-providers \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+Channel Adapter 和普通 Web Chat 的触发方式不同：
+
+- Web Chat 是用户主动对话，用户在某个 conversation 里发送 query 才触发 Agent Loop。
+- Channel Adapter 是监听入口，外部 QQ 私聊、群聊 @ 或关键字命中后，由 webhook 事件触发 Agent Loop。
+- 前端建议单独做 Channels 页面管理连接、策略、inbox、outbox 和审批；不要把 Channel connection 当成普通“新建对话”入口。
+- 每个 `channel_connection` 默认对应一个专用监听/主控会话；外部私聊、群聊等 scope 通过 `external_conversations` 映射到本地 conversation，并在 UI 上归属该 Channel connection。
+- 微信、Telegram、Discord、飞书等具体 Adapter 当前强制暂缓实现，只保留抽象；当前可运行验证入口是 NapCatQQ / OneBot。
+
 创建 NapCatQQ 渠道连接：
 
 ```bash

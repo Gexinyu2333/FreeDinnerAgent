@@ -17,7 +17,7 @@ FreeDinnerAgent 是一个面向个人场景的 AI 个人助理全栈 Web 应用�
 - 工具调用：Function Calling 的注册、路由与稳定性处理
 - Agent Loop：Bounded ReAct 推理、执行、观察与最终回复
 - 心跳任务：定时提醒、每日简报、每周回顾和跟进监控
-- 多渠道入口：QQ、微信、Telegram、Discord、飞书等外部聊天入口
+- 多渠道入口：当前以 NapCatQQ / OneBot 作为首个外部监听入口；微信、Telegram、Discord、飞书等具体 Adapter 强制暂缓，只保留通用抽象
 - LLM 输出不稳定时的兜底、重试与降级机制
 - 用户数据隔离与隐私保护
 - 后台服务架构与接口设计
@@ -36,7 +36,7 @@ FreeDinnerAgent 是一个面向个人场景的 AI 个人助理全栈 Web 应用�
 
 ```text
 FreeDinnerAgent/
-  frontend/               # React 前端项目，提供对话界面和个人助理工作台
+  frontend/               # React 前端项目，提供 Web Chat、Channels 入口和个人助理工作台
   backend/                # Go 后端服务，负责 Agent 编排、接口、工具调用和数据访问
   database/               # PostgreSQL 表结构、迁移脚本、初始化数据
   docs/                   # 总体设计、系统架构、接口设计和开发说明
@@ -54,7 +54,7 @@ FreeDinnerAgent/
    - 支持会话标题、创建时间和更新时间
 
 2. AI 对话
-   - 前端发送用户消息
+   - Web Chat 是用户主动发起的对话，只有用户在当前会话输入 query 时才触发 Agent Loop
    - 用户可配置自己的 OpenAI 或 Anthropic API Key
    - 后端按当前用户的默认 Agent 配置和模型供应商配置调用 LLM
    - 后端组装上下文、相关记忆和可用工具
@@ -78,7 +78,9 @@ FreeDinnerAgent/
    - 信息检索
    - 心跳任务：每日简报、每周回顾、跟进监控、定时提醒
    - 能力市场：MCP、Skills、Tools、Knowledge Base 支持私有/公共和安装到个人 Agent
-   - 多渠道入口：先接入 NapCatQQ，后续扩展微信、Telegram、Discord、飞书
+   - 多渠道入口：先接入 NapCatQQ / OneBot；Channel Adapter 作为独立监听入口，不混入普通 Web Chat 新建对话
+   - 每个 Channel connection 默认有一个专用监听/主控会话，用于展示 inbound/outbox、运行日志、审批和人工介入记录
+   - 微信、Telegram、Discord、飞书等具体 Adapter 与生产级 sandbox 强隔离项一样，当前 MVP 强制暂缓实现
    - 后续可继续扩展更多工具
 
 5. 稳定性处理
@@ -200,7 +202,8 @@ http://localhost:5173
 - 保存会话消息
 - 创建和查看心跳任务：每日简报、每周回顾、跟进监控
 - 支持心跳任务立即运行并写入运行记录
-- 接入 NapCatQQ 私聊和群聊 @ 触发，预留多渠道 Channel Adapter 扩展
+- 接入 NapCatQQ 私聊和群聊 @ 触发，Channel 入口与普通 Web Chat 入口分离
+- 微信、Telegram、Discord、飞书等具体 Adapter 暂缓实现，只保留通用 Channel Adapter 抽象
 - 写入和检索 Profile Memory
 - 保存 Episodic Memory
 - 支持 Semantic Memory 文档切片
