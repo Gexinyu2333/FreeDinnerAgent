@@ -924,3 +924,196 @@ PATCH /api/v1/me/mcp-servers/{mcp_server_id}/settings
 ```
 
 `env` 中的敏感信息由后端加密保存到 `user_mcp_server_settings.encrypted_env`，接口不返回明文。
+
+## 13. 系统提示词市场接口
+
+### 获取系统提示词模板市场
+
+```http
+GET /api/v1/system-prompt-templates?visibility=public&category=assistant
+```
+
+返回公共模板和当前用户自己的私有模板。
+
+### 创建系统提示词模板
+
+```http
+POST /api/v1/system-prompt-templates
+```
+
+请求：
+
+```json
+{
+  "display_name": "学习型个人助理",
+  "description": "适合课程复习、资料整理和项目推进的系统提示词。",
+  "category": "study",
+  "tags": ["study", "planner"],
+  "visibility": "private"
+}
+```
+
+### 创建模板版本
+
+```http
+POST /api/v1/system-prompt-templates/{template_id}/versions
+```
+
+请求：
+
+```json
+{
+  "content": "你是 {user_display_name} 的学习型个人助理，回答时先给结论，再给步骤。",
+  "change_note": "初始版本",
+  "variables": [
+    {
+      "name": "user_display_name",
+      "value_type": "string",
+      "required": true,
+      "default_value": "用户"
+    }
+  ]
+}
+```
+
+### 绑定模板到我的 Agent
+
+```http
+PATCH /api/v1/me/agent-config/system-prompt
+```
+
+请求：
+
+```json
+{
+  "system_prompt_template_id": "uuid",
+  "system_prompt_template_version_id": "uuid",
+  "system_prompt_variables": {
+    "user_display_name": "Gexin"
+  },
+  "custom_system_prompt_override": "回答尽量简洁，但保留关键推理步骤。"
+}
+```
+
+Agent 绑定的是具体模板版本。公共模板发布新版本后，不会自动改变用户 Agent 行为。
+
+### 预览最终系统提示词
+
+```http
+POST /api/v1/me/agent-config/system-prompt/preview
+```
+
+该接口返回模板、变量、用户覆盖内容和系统策略拼接后的预览，用于前端确认。
+
+## 14. Workspace Sandbox 接口
+
+### 获取我的 Workspace 状态
+
+```http
+GET /api/v1/me/workspace
+```
+
+响应包含 workspace 是否启用、状态、磁盘配额、文件数量、网络策略和最近活跃时间。
+
+### 启用 Workspace
+
+```http
+POST /api/v1/me/workspace
+```
+
+请求：
+
+```json
+{
+  "sandbox_type": "local_dir",
+  "max_disk_bytes": 1073741824,
+  "max_file_count": 5000,
+  "max_single_file_bytes": 52428800,
+  "max_command_seconds": 30,
+  "network_policy": "disabled",
+  "cpu_limit": "1.0",
+  "memory_limit_bytes": 536870912,
+  "idle_after_seconds": 604800,
+  "destroy_after_seconds": 2592000
+}
+```
+
+### 更新 Workspace 策略
+
+```http
+PATCH /api/v1/me/workspace
+```
+
+请求：
+
+```json
+{
+  "network_policy": "allowlist",
+  "network_allowlist": ["github.com", "registry.npmjs.org"],
+  "max_command_seconds": 60
+}
+```
+
+### 列出文件
+
+```http
+GET /api/v1/me/workspace/files?path=/
+```
+
+### 读取文件
+
+```http
+GET /api/v1/me/workspace/files/content?path=/notes/todo.md
+```
+
+### 写入文件
+
+```http
+PUT /api/v1/me/workspace/files/content
+```
+
+请求：
+
+```json
+{
+  "path": "/notes/todo.md",
+  "content": "今天要完成 Step 11 设计。"
+}
+```
+
+### 执行受限命令
+
+```http
+POST /api/v1/me/workspace/commands
+```
+
+请求：
+
+```json
+{
+  "command": "go",
+  "args": ["test", "./..."],
+  "working_dir": "/project",
+  "timeout_seconds": 30
+}
+```
+
+命令执行必须限制在当前用户 workspace 内，默认禁止网络。生产环境必须使用容器或更强 sandbox。
+
+当前后端默认使用本地目录 sandbox 和白名单命令执行，不经过 shell。参数禁止绝对路径、`..`、换行和 NUL 字符；`python`、`python3`、`node` 只允许运行 workspace 内脚本文件。
+
+如果用户 workspace 的 `sandbox_type` 是 `docker`、`podman` 或 `nsjail`，后端会将同一条命令转交给对应 runner，并使用 `network_policy`、`cpu_limit`、`memory_limit_bytes`、`max_command_seconds` 生成隔离参数。本地开发不要求安装这些 runtime；部署环境再安装并配置对应 binary。
+
+### 查看命令记录
+
+```http
+GET /api/v1/me/workspace/commands?limit=50
+```
+
+### 销毁 Workspace
+
+```http
+DELETE /api/v1/me/workspace
+```
+
+销毁前可以选择归档或直接删除。MVP 阶段建议只支持用户手动销毁。

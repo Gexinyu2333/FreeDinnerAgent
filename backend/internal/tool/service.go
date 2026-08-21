@@ -9,6 +9,7 @@ import (
 
 	"freedinner/backend/internal/knowledge"
 	"freedinner/backend/internal/store"
+	workspacesvc "freedinner/backend/internal/workspace"
 )
 
 var ErrUnsupportedTool = errors.New("unsupported tool")
@@ -18,6 +19,7 @@ type Service struct {
 	tasks     *store.TaskStore
 	memories  *store.MemoryStore
 	knowledge *knowledge.Service
+	workspace *workspacesvc.Service
 }
 
 type ExecuteInput struct {
@@ -32,12 +34,13 @@ type ExecuteResult struct {
 	Result   json.RawMessage   `json:"result"`
 }
 
-func NewService(tools *store.ToolStore, tasks *store.TaskStore, memories *store.MemoryStore, knowledgeService *knowledge.Service) *Service {
+func NewService(tools *store.ToolStore, tasks *store.TaskStore, memories *store.MemoryStore, knowledgeService *knowledge.Service, workspaceService *workspacesvc.Service) *Service {
 	return &Service{
 		tools:     tools,
 		tasks:     tasks,
 		memories:  memories,
 		knowledge: knowledgeService,
+		workspace: workspaceService,
 	}
 }
 
@@ -90,6 +93,18 @@ func BuiltinDefinitions() []store.BuiltinToolDefinition {
 			RequiresApproval: false,
 			ParameterSchema:  rawSchema(`{"type":"object","required":["query"],"properties":{"query":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":20}}}`),
 			ResultSchema:     rawSchema(`{"type":"object","properties":{"profile_memories":{"type":"array"},"semantic_memory":{"type":"object"}}}`),
+		},
+		{
+			Name:             "run_workspace_command",
+			Namespace:        "workspace",
+			DisplayName:      "运行 Workspace 命令",
+			Description:      "在当前用户启用的 Workspace 内执行白名单 CLI 命令，不经过 shell，并记录命令历史。",
+			Category:         "system",
+			HandlerRef:       "builtin.workspace.run_command",
+			PermissionLevel:  "sensitive",
+			RequiresApproval: false,
+			ParameterSchema:  rawSchema(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"working_dir":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}}}`),
+			ResultSchema:     rawSchema(`{"type":"object","properties":{"run":{"type":"object"}}}`),
 		},
 	}
 }
@@ -156,6 +171,8 @@ func (s *Service) executeBuiltin(ctx context.Context, input ExecuteInput) (json.
 		result, err = s.saveProfileMemory(ctx, input.UserID, input.Arguments)
 	case "search_memory":
 		result, err = s.searchMemory(ctx, input.UserID, input.Arguments)
+	case "run_workspace_command":
+		result, err = s.runWorkspaceCommand(ctx, input)
 	default:
 		err = ErrUnsupportedTool
 	}
@@ -278,6 +295,37 @@ func (s *Service) searchMemory(ctx context.Context, userID string, arguments jso
 		"profile_memories": profile,
 		"semantic_memory":  semantic,
 	}, nil
+}
+
+func (s *Service) runWorkspaceCommand(ctx context.Context, input ExecuteInput) (any, error) {
+	if s.workspace == nil {
+		return nil, errors.New("workspace service is not configured")
+	}
+	var args struct {
+		Command        string   `json:"command"`
+		Args           []string `json:"args"`
+		WorkingDir     string   `json:"working_dir"`
+		TimeoutSeconds int      `json:"timeout_seconds"`
+	}
+	if err := json.Unmarshal(input.Arguments, &args); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(args.Command) == "" {
+		return nil, errors.New("command is required")
+	}
+	conversationID := input.ConversationID
+	result, err := s.workspace.RunCommand(ctx, workspacesvc.RunCommandInput{
+		UserID:         input.UserID,
+		ConversationID: &conversationID,
+		Command:        args.Command,
+		Args:           args.Args,
+		WorkingDir:     args.WorkingDir,
+		TimeoutSeconds: args.TimeoutSeconds,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func normalizePriority(value string) string {

@@ -725,6 +725,105 @@ CREATE TABLE IF NOT EXISTS tool_approval_requests (
     resolved_at TIMESTAMPTZ
 );
 
+-- User-level Workspace Sandbox stores per-user file and CLI execution boundaries.
+CREATE TABLE IF NOT EXISTS user_workspaces (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(32) NOT NULL DEFAULT 'disabled' CHECK (status IN ('disabled', 'provisioning', 'active', 'idle', 'archived', 'destroying', 'destroyed', 'suspended')),
+    root_path TEXT NOT NULL,
+    sandbox_type VARCHAR(40) NOT NULL DEFAULT 'local_dir' CHECK (sandbox_type IN ('local_dir', 'docker', 'podman', 'nsjail', 'firecracker')),
+    network_policy VARCHAR(40) NOT NULL DEFAULT 'disabled' CHECK (network_policy IN ('disabled', 'allowlist', 'full')),
+    network_allowlist TEXT[] NOT NULL DEFAULT '{}',
+    max_disk_bytes BIGINT NOT NULL DEFAULT 1073741824 CHECK (max_disk_bytes > 0),
+    max_file_count INTEGER NOT NULL DEFAULT 5000 CHECK (max_file_count > 0),
+    max_single_file_bytes BIGINT NOT NULL DEFAULT 52428800 CHECK (max_single_file_bytes > 0),
+    max_command_seconds INTEGER NOT NULL DEFAULT 30 CHECK (max_command_seconds > 0),
+    max_stdout_bytes INTEGER NOT NULL DEFAULT 262144 CHECK (max_stdout_bytes > 0),
+    max_stderr_bytes INTEGER NOT NULL DEFAULT 262144 CHECK (max_stderr_bytes > 0),
+    cpu_limit VARCHAR(80),
+    memory_limit_bytes BIGINT CHECK (memory_limit_bytes IS NULL OR memory_limit_bytes > 0),
+    last_active_at TIMESTAMPTZ,
+    idle_after_seconds INTEGER NOT NULL DEFAULT 604800 CHECK (idle_after_seconds > 0),
+    destroy_after_seconds INTEGER NOT NULL DEFAULT 2592000 CHECK (destroy_after_seconds > 0),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id),
+    UNIQUE (root_path)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_files (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES user_workspaces(id) ON DELETE CASCADE,
+    relative_path TEXT NOT NULL CHECK (
+        relative_path <> ''
+        AND relative_path NOT LIKE '/%'
+        AND relative_path NOT LIKE '../%'
+        AND relative_path NOT LIKE '%/../%'
+    ),
+    file_type VARCHAR(40) NOT NULL CHECK (file_type IN ('file', 'directory', 'artifact')),
+    size_bytes BIGINT NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
+    content_hash VARCHAR(128),
+    mime_type VARCHAR(120),
+    created_by VARCHAR(40) NOT NULL DEFAULT 'agent' CHECK (created_by IN ('user', 'agent', 'tool', 'system')),
+    status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'deleted', 'archived')),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (workspace_id, relative_path)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_command_runs (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES user_workspaces(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    agent_turn_id UUID REFERENCES agent_turns(id) ON DELETE SET NULL,
+    tool_call_id UUID REFERENCES tool_call_logs(id) ON DELETE SET NULL,
+    command VARCHAR(160) NOT NULL,
+    args JSONB NOT NULL DEFAULT '[]'::jsonb,
+    working_dir TEXT NOT NULL DEFAULT '.',
+    network_policy VARCHAR(40) NOT NULL DEFAULT 'disabled' CHECK (network_policy IN ('disabled', 'allowlist', 'full')),
+    status VARCHAR(32) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'success', 'failed', 'timeout', 'cancelled', 'blocked')),
+    exit_code INTEGER,
+    stdout_preview TEXT,
+    stderr_preview TEXT,
+    stdout_truncated BOOLEAN NOT NULL DEFAULT FALSE,
+    stderr_truncated BOOLEAN NOT NULL DEFAULT FALSE,
+    duration_ms INTEGER CHECK (duration_ms IS NULL OR duration_ms >= 0),
+    error_message TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS workspace_events (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES user_workspaces(id) ON DELETE CASCADE,
+    event_type VARCHAR(60) NOT NULL CHECK (event_type IN ('created', 'enabled', 'disabled', 'provisioned', 'idle', 'archived', 'destroying', 'destroyed', 'suspended', 'resumed', 'file_created', 'file_read', 'file_updated', 'file_deleted', 'command_started', 'command_finished', 'quota_exceeded', 'policy_changed', 'security_blocked')),
+    actor_type VARCHAR(40) NOT NULL DEFAULT 'system' CHECK (actor_type IN ('user', 'agent', 'tool', 'system')),
+    actor_id UUID,
+    file_id UUID REFERENCES workspace_files(id) ON DELETE SET NULL,
+    command_run_id UUID REFERENCES workspace_command_runs(id) ON DELETE SET NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS workspace_quota_snapshots (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES user_workspaces(id) ON DELETE CASCADE,
+    used_disk_bytes BIGINT NOT NULL DEFAULT 0 CHECK (used_disk_bytes >= 0),
+    file_count INTEGER NOT NULL DEFAULT 0 CHECK (file_count >= 0),
+    command_count INTEGER NOT NULL DEFAULT 0 CHECK (command_count >= 0),
+    active_process_count INTEGER NOT NULL DEFAULT 0 CHECK (active_process_count >= 0),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Records what memory was retrieved for each turn. Useful for debugging and UX transparency.
 CREATE TABLE IF NOT EXISTS memory_retrieval_logs (
     id UUID PRIMARY KEY,
@@ -894,6 +993,15 @@ CREATE INDEX IF NOT EXISTS idx_tool_router_logs_message ON tool_router_logs(mess
 CREATE INDEX IF NOT EXISTS idx_tool_call_logs_conversation ON tool_call_logs(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_tool_call_logs_user_status ON tool_call_logs(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_tool_approval_requests_user_status ON tool_approval_requests(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_user_workspaces_user_status ON user_workspaces(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_user_workspaces_status_last_active ON user_workspaces(status, last_active_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_files_workspace_path ON workspace_files(workspace_id, relative_path);
+CREATE INDEX IF NOT EXISTS idx_workspace_files_user_status_updated ON workspace_files(user_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_command_runs_workspace_created ON workspace_command_runs(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_command_runs_user_status ON workspace_command_runs(user_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_events_workspace_created ON workspace_events(workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_events_user_type_created ON workspace_events(user_id, event_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_workspace_quota_snapshots_workspace_created ON workspace_quota_snapshots(workspace_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_retrieval_logs_message ON memory_retrieval_logs(message_id);
 CREATE INDEX IF NOT EXISTS idx_context_build_logs_message ON context_build_logs(message_id);
 CREATE INDEX IF NOT EXISTS idx_context_build_items_build ON context_build_items(context_build_id);

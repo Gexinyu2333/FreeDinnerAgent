@@ -8,22 +8,32 @@ import (
 )
 
 type Config struct {
-	AppEnv              string
-	ServerPort          string
-	DatabaseURL         string
-	JWTSecret           string
-	APIKeyEncryptionKey string
+	AppEnv                string
+	ServerPort            string
+	DatabaseURL           string
+	JWTSecret             string
+	APIKeyEncryptionKey   string
+	WorkspaceRoot         string
+	WorkspaceSandboxImage string
+	WorkspaceDockerBinary string
+	WorkspacePodmanBinary string
+	WorkspaceNsJailBinary string
 }
 
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		AppEnv:              getEnv("APP_ENV", "development"),
-		ServerPort:          getEnv("SERVER_PORT", "8080"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		JWTSecret:           os.Getenv("JWT_SECRET"),
-		APIKeyEncryptionKey: os.Getenv("API_KEY_ENCRYPTION_KEY"),
+		AppEnv:                getEnv("APP_ENV", "development"),
+		ServerPort:            getEnv("SERVER_PORT", "8080"),
+		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		APIKeyEncryptionKey:   os.Getenv("API_KEY_ENCRYPTION_KEY"),
+		WorkspaceRoot:         getEnv("WORKSPACE_ROOT", "./.workspaces"),
+		WorkspaceSandboxImage: getEnv("WORKSPACE_SANDBOX_IMAGE", "freedinner-agent-sandbox:latest"),
+		WorkspaceDockerBinary: getEnv("WORKSPACE_DOCKER_BINARY", "docker"),
+		WorkspacePodmanBinary: getEnv("WORKSPACE_PODMAN_BINARY", "podman"),
+		WorkspaceNsJailBinary: getEnv("WORKSPACE_NSJAIL_BINARY", "nsjail"),
 	}
 
 	if cfg.DatabaseURL == "" {

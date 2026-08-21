@@ -185,6 +185,7 @@ http://localhost:5173
 - [心跳任务与主动助理设计](docs/scheduled-agent-jobs-design.md)
 - [多渠道入口设计](docs/channel-adapter-design.md)
 - [能力市场设计](docs/capability-market-design.md)
+- [用户级 Workspace Sandbox 设计](docs/workspace-sandbox-design.md)
 - [接口设计草案](docs/api-design.md)
 
 ## 当前阶段

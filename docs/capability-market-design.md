@@ -2,26 +2,27 @@
 
 ## 1. 设计目标
 
-FreeDinnerAgent 的能力不只来自内置工具，还可以来自 MCP Server、用户或系统沉淀的 Skills、公共知识库、普通工具和外部聊天入口。为了让这些能力可发现、可安装、可启用、可共享，系统设计一个统一的 Capability Market。
+FreeDinnerAgent 的能力不只来自内置工具，还可以来自 MCP Server、用户或系统沉淀的 Skills、公共知识库、普通工具、系统提示词模板和外部聊天入口。为了让这些能力可发现、可安装、可启用、可共享，系统设计一个统一的 Capability Market。
 
 核心目标：
 
 - 公共能力所有用户可见，私有能力仅本人可见。
 - 用户可以把能力安装到自己的账号。
 - 用户可以选择某个 Agent 使用哪些能力。
-- MCP、Skills、Tools、Knowledge Base、Channel Adapter 使用统一的市场和安装模型。
+- MCP、Skills、Tools、Knowledge Base、Channel Adapter、System Prompt Template 使用统一的市场和安装模型。
 - Skills 使用渐进式披露，按任务需要加载 light、standard、full 内容，控制 Token。
 
 ## 2. 能力类型
 
-市场支持五类能力：
+市场支持六类能力：
 
 ```text
-tool            # 普通内置工具或 HTTP 工具
-mcp_server      # MCP Server，提供一组外部工具或资源
-skill           # 可复用工作流 / Procedural Memory
-knowledge_base  # Semantic Memory 知识库
-channel_adapter # QQ、Telegram、Discord、飞书等外部聊天入口
+tool                   # 普通内置工具或 HTTP 工具
+mcp_server             # MCP Server，提供一组外部工具或资源
+skill                  # 可复用工作流 / Procedural Memory
+knowledge_base         # Semantic Memory 知识库
+channel_adapter        # QQ、Telegram、Discord、飞书等外部聊天入口
+system_prompt_template # Agent 系统提示词模板
 ```
 
 可见性：
@@ -36,7 +37,7 @@ channel_adapter # QQ、Telegram、Discord、飞书等外部聊天入口
 核心表：
 
 ```text
-marketplace_items           # 市场条目，统一展示 Tool/MCP/Skill/Knowledge/Channel
+marketplace_items           # 市场条目，统一展示 Tool/MCP/Skill/Knowledge/Channel/Prompt
 user_capability_installs    # 用户安装了哪些能力
 agent_capability_bindings   # 某个 Agent 启用了哪些能力
 ```
@@ -56,6 +57,9 @@ knowledge_chunks            # 知识库切片
 channel_provider_definitions # Channel Adapter 定义
 channel_connections          # 用户的渠道连接实例
 channel_policies             # 私聊/群聊触发策略
+system_prompt_templates      # 系统提示词模板
+system_prompt_template_versions # 系统提示词模板版本
+system_prompt_template_variables # 系统提示词变量定义
 ```
 
 关系：
@@ -67,6 +71,7 @@ marketplace_items.ref_id
   -> skills.id
   -> knowledge_documents.id
   -> channel_provider_definitions.id
+  -> system_prompt_templates.id
 
 user_capability_installs
   -> 用户安装能力
@@ -84,6 +89,7 @@ agent_capability_bindings
 - Tools
 - Knowledge Bases
 - Channels
+- System Prompts
 
 筛选条件：
 
@@ -104,6 +110,8 @@ agent_capability_bindings
 - 归档公共能力
 
 Channel Adapter 安装后还需要创建连接，例如配置 NapCatQQ endpoint、Telegram Bot Token、飞书事件订阅 secret。能力市场负责“安装入口能力”，渠道连接页负责“绑定具体账号或机器人实例”。
+
+System Prompt Template 安装后可以直接绑定到某个 Agent 配置。Agent 绑定的是具体模板版本，而不是永远跟随最新版本，避免公共模板更新后导致 Agent 行为漂移。
 
 ## 5. MCP 接入方式
 
@@ -217,25 +225,252 @@ skill_disclosure_sections
 - `standard`
 - `full`
 
-## 8. Agent 如何使用市场能力
+## 8. System Prompt Template 接入方式
+
+System Prompt Template 定义 Agent 的长期身份、表达风格、工作边界和安全约束。它不应该只是一段保存在 `user_agent_configs.system_prompt` 里的普通文本，而应该像 MCP、Skills、Knowledge Base 一样，沉淀成可复用、可分享、可版本化的市场能力。
+
+核心目标：
+
+- 用户可以创建自己的私有系统提示词模板。
+- 用户可以发布公开模板，供其他用户安装或 fork。
+- 用户可以把模板绑定到自己的 Agent 配置。
+- 模板需要版本化，避免公共模板更新后悄悄改变用户 Agent 行为。
+- 模板可以声明变量、适用场景、风险边界和推荐能力组合。
+- Context Builder 在构建上下文时，根据 Agent 配置加载当前模板版本。
+
+来源：
+
+- 系统内置模板。
+- 用户私有模板。
+- 公共市场安装。
+- 用户 fork 公共模板后修改。
+
+它和 Skill 的区别：
+
+- System Prompt Template：定义 Agent 的长期身份、风格、规则和总边界。
+- Skill：定义某类任务的可复用流程、工具序列和输出模板。
+
+一次 Agent Turn 中，系统提示词模板通常位于上下文最前面，而 Skill 只在当前任务命中时按渐进式披露加载。
+
+可见性：
+
+- `private`：仅创建者可见。
+- `public`：所有用户可见。
+
+生命周期：
+
+- `draft`：草稿，只能创建者使用。
+- `published`：已发布，可被安装或绑定。
+- `archived`：归档，不再推荐新用户安装，但已绑定的 Agent 可以继续使用旧版本。
+- `deleted`：逻辑删除。
+
+公开模板推荐支持 fork：
+
+```text
+公共模板
+  -> 用户安装
+  -> 用户 fork 为自己的私有模板
+  -> 用户修改变量、风格或安全规则
+```
+
+模板结构：
+
+```text
+system_prompt_templates
+system_prompt_template_versions
+system_prompt_template_variables
+```
+
+`system_prompt_templates` 保存模板主信息：
+
+- `id`
+- `owner_user_id`：为空表示系统内置模板。
+- `name`
+- `display_name`
+- `description`
+- `category`
+- `tags`
+- `visibility`
+- `status`
+- `latest_version`
+- `created_at`
+- `updated_at`
+
+`system_prompt_template_versions` 保存具体版本：
+
+- `id`
+- `template_id`
+- `version`
+- `content`
+- `change_note`
+- `recommended_model_family`
+- `recommended_capabilities`
+- `safety_policy`
+- `token_estimate`
+- `status`
+- `created_at`
+
+`system_prompt_template_variables` 保存变量定义：
+
+- `id`
+- `template_version_id`
+- `name`
+- `display_name`
+- `description`
+- `default_value`
+- `required`
+- `value_type`
+
+能力市场关联：
+
+```text
+marketplace_items.item_type = 'system_prompt_template'
+marketplace_items.ref_id -> system_prompt_templates.id
+```
+
+Agent 配置绑定：
+
+```text
+user_agent_configs.system_prompt_template_id
+user_agent_configs.system_prompt_template_version_id
+user_agent_configs.system_prompt_variables
+user_agent_configs.custom_system_prompt_override
+```
+
+其中：
+
+- `system_prompt_template_id`：当前 Agent 使用哪个模板。
+- `system_prompt_template_version_id`：锁定哪个版本。
+- `system_prompt_variables`：用户填入的变量值。
+- `custom_system_prompt_override`：用户自己的覆盖内容，可为空。
+
+Context Builder 加载规则：
+
+1. 读取当前用户的默认 Agent 配置。
+2. 如果配置绑定了 `system_prompt_template_version_id`，加载该版本内容。
+3. 根据 `system_prompt_variables` 替换模板变量。
+4. 如果存在 `custom_system_prompt_override`，按配置策略追加或覆盖模板内容。
+5. 拼入安全边界、工具策略、记忆策略、MCP/Skill 选择、渠道策略和 Workspace 策略。
+6. 写入 `context_build_items`，记录本轮使用了哪个模板版本。
+
+建议拼接顺序：
+
+```text
+Meta System Policy
+  -> System Prompt Template
+  -> User Custom Override
+  -> Memory Policy
+  -> Tool / MCP / Skill Policy
+  -> Channel / Workspace Policy
+```
+
+这样系统层规则、用户模板、记忆和工具边界各有位置，不会混在一坨文本里。
+
+模板可以声明变量，例如：
+
+```text
+{agent_name}
+{user_display_name}
+{language}
+{tone}
+{memory_policy}
+{workspace_policy}
+{preferred_output_style}
+```
+
+变量必须有类型：
+
+- `string`
+- `number`
+- `boolean`
+- `enum`
+- `json`
+
+前端根据变量定义渲染配置表单，用户不需要直接改模板原文。
+
+模板必须版本化。公共模板发布新版本后，不自动改变已经绑定旧版本的 Agent；用户需要手动升级。
+
+版本规则：
+
+- 新建模板先产生 `v1`。
+- 编辑已发布版本时，不直接修改原版本，而是创建新版本。
+- Agent 默认锁定具体版本。
+- 用户可以手动升级到新版本。
+- Context Build 日志记录实际使用的版本。
+
+公开模板可能诱导模型泄露隐私、绕过工具审批或访问不该访问的 workspace，因此需要基本审核。
+
+发布公共模板时应检查：
+
+- 是否包含越权指令。
+- 是否要求忽略系统安全策略。
+- 是否默认开启高风险工具。
+- 是否要求自动发送社交消息。
+- 是否诱导读取其他用户数据。
+
+公共模板只能表达“角色和工作方式”，不能绕过：
+
+- 用户隔离。
+- API Key 隔离。
+- Tool approval。
+- Channel outbox 审批。
+- Workspace sandbox 边界。
+
+前端可以在能力市场中展示 System Prompts，也可以在 Agent 设置页提供快捷入口。
+
+市场页面：
+
+- 浏览公共模板。
+- 查看模板详情和版本。
+- 安装模板。
+- Fork 模板。
+- 发布自己的模板。
+
+Agent 设置页：
+
+- 选择系统提示词模板。
+- 选择版本。
+- 填写变量。
+- 添加个人覆盖内容。
+- 预览最终系统提示词。
+
+预览很重要。用户需要看到最终进入上下文的系统提示词片段，而不是只看到模板名字。
+
+MVP 第一版可以先做：
+
+1. 新增系统提示词模板和版本表。
+2. 支持私有/公共模板。
+3. Agent 配置绑定模板版本。
+4. Context Builder 加载模板内容。
+5. 前端可创建、选择、预览模板。
+
+暂缓：
+
+- 公开模板审核流。
+- 模板评分和安装量。
+- A/B 测试。
+- 变量复杂类型校验。
+
+## 9. Agent 如何使用市场能力
 
 一次对话中，Context Engine 和 Tool Router 只看当前 Agent 已绑定的能力。
 
 流程：
 
 1. 读取当前用户的 `user_agent_configs`。
-2. 查询 `agent_capability_bindings`。
-3. 过滤用户已安装且启用的能力。
-4. 加载私有能力 + 公共能力。
-5. MCP Server 提供工具候选。
-6. Skills 提供流程候选和工具序列。
-7. Knowledge Base 提供 Semantic Memory 候选。
-8. Tool Router 选择本轮真正需要注入 Prompt 的工具 schema。
-9. Context Engine 按渐进式披露加载 Skill 内容。
+2. 加载 Agent 绑定的系统提示词模板版本。
+3. 查询 `agent_capability_bindings`。
+4. 过滤用户已安装且启用的能力。
+5. 加载私有能力 + 公共能力。
+6. MCP Server 提供工具候选。
+7. Skills 提供流程候选和工具序列。
+8. Knowledge Base 提供 Semantic Memory 候选。
+9. Tool Router 选择本轮真正需要注入 Prompt 的工具 schema。
+10. Context Engine 按渐进式披露加载 Skill 内容。
 
 这样避免“安装了很多能力就全部进 Prompt”的问题。
 
-## 9. 公共与私有发布规则
+## 10. 公共与私有发布规则
 
 默认规则：
 
@@ -245,8 +480,9 @@ skill_disclosure_sections
 - Skill 可以发布为公共能力，但需要去除个人信息。
 - Knowledge Base 可以发布为公共能力，但不应包含隐私内容。
 - MCP Server 可以发布定义，但用户密钥永远保存在自己的 `user_mcp_server_settings.encrypted_env`。
+- System Prompt Template 可以发布为公共能力，但不能包含越权指令、隐私信息或绕过审批的规则。
 
-## 10. 新增能力扩展流程
+## 11. 新增能力扩展流程
 
 新增 MCP：
 
@@ -272,7 +508,7 @@ skill_disclosure_sections
 4. 写入 `marketplace_items`。
 5. 用户安装并绑定到 Agent。
 
-## 11. 小巧思：能力推荐
+## 12. 小巧思：能力推荐
 
 系统可以根据用户当前对话推荐能力：
 

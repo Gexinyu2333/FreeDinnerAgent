@@ -1,0 +1,6 @@
+.idea/
+
+backend/.env
+backend/.workspaces/
+
+*.log

@@ -49,12 +49,16 @@ func NewConversationStore(db *pgxpool.Pool) *ConversationStore {
 }
 
 func (s *ConversationStore) Create(ctx context.Context, userID, title string) (Conversation, error) {
+	return s.CreateWithChannel(ctx, userID, title, "web")
+}
+
+func (s *ConversationStore) CreateWithChannel(ctx context.Context, userID, title, channel string) (Conversation, error) {
 	query := `
 		INSERT INTO conversations (id, user_id, title, channel)
-		VALUES ($1, $2, $3, 'web')
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, user_id, title, channel, status, created_at, updated_at
 	`
-	return scanConversation(s.db.QueryRow(ctx, query, uuid.NewString(), userID, title))
+	return scanConversation(s.db.QueryRow(ctx, query, uuid.NewString(), userID, title, channel))
 }
 
 func (s *ConversationStore) List(ctx context.Context, userID string) ([]Conversation, error) {

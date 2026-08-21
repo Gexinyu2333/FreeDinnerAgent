@@ -26,6 +26,18 @@ go mod tidy
 go run ./cmd/server
 ```
 
+可选环境变量：
+
+```bash
+WORKSPACE_ROOT=./.workspaces
+WORKSPACE_SANDBOX_IMAGE=freedinner-agent-sandbox:latest
+WORKSPACE_DOCKER_BINARY=docker
+WORKSPACE_PODMAN_BINARY=podman
+WORKSPACE_NSJAIL_BINARY=nsjail
+```
+
+本地开发默认使用 `./.workspaces` 和 `local_dir` sandbox。Linux 部署时可以把 `WORKSPACE_ROOT` 改成 `/var/lib/freedinner/workspaces`，再将用户 workspace 的 `sandbox_type` 配成 `docker`、`podman` 或 `nsjail`。这些 runtime 不会在本地开发时自动启动，只有对应用户启用对应 sandbox 类型时才会被调用。
+
 ## 当前已实现接口
 
 健康检查：
@@ -138,6 +150,145 @@ curl -sS -X POST http://localhost:8080/api/v1/tools/create_task/call \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"conversation_id":"<conversation_id>","arguments":{"title":"整理 Step 8 工具接口","priority":"high"}}'
+```
+
+创建心跳任务：
+
+```bash
+curl -sS -X POST http://localhost:8080/api/v1/scheduled-agent-jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"每日简报","description":"工作日早上生成个人简报。","job_type":"daily_brief","schedule_kind":"weekly","timezone":"Asia/Shanghai","run_at_local_time":"08:00","weekdays":[1,2,3,4,5],"prompt_template":"请根据我的任务、记忆和最近对话生成今天的个人简报。","delivery_channel":"in_app"}'
+```
+
+查看心跳任务：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/scheduled-agent-jobs?status=active" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+手动触发心跳任务：
+
+```bash
+JOB_ID="<创建心跳任务返回的 id>"
+curl -sS -X POST "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/run-now" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+查看心跳任务运行记录：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/runs" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+查看可用渠道 Provider：
+
+```bash
+curl -sS http://localhost:8080/api/v1/channel-providers \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+创建 NapCatQQ 渠道连接：
+
+```bash
+NAPCAT_PROVIDER_ID="<channel-providers 里 name=napcatqq 的 id>"
+curl -sS -X POST http://localhost:8080/api/v1/me/channel-connections \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provider_id":"'"$NAPCAT_PROVIDER_ID"'","display_name":"本地 NapCatQQ","external_account_id":"你的机器人 QQ 号","external_account_name":"FreeDinnerBot","config":{"endpoint":"http://127.0.0.1:3000","access_token":"napcat-token","webhook_secret":"hook-secret"}}'
+```
+
+NapCatQQ / OneBot Webhook 地址：
+
+```text
+POST http://localhost:8080/api/v1/channels/<connection_id>/webhook
+Header: X-FreeDinner-Webhook-Secret: hook-secret
+```
+
+本地模拟一条 QQ 私聊消息：
+
+```bash
+CONNECTION_ID="<创建渠道连接返回的 id>"
+curl -sS -X POST "http://localhost:8080/api/v1/channels/$CONNECTION_ID/webhook" \
+  -H "Content-Type: application/json" \
+  -H "X-FreeDinner-Webhook-Secret: hook-secret" \
+  -d '{"post_type":"message","message_type":"private","message_id":123456,"user_id":10001,"raw_message":"你好，小饭","sender":{"nickname":"测试好友"}}'
+```
+
+群聊默认只有 @ 机器人时触发，且外发消息默认进入 `pending`：
+
+```bash
+curl -sS -X POST "http://localhost:8080/api/v1/channels/$CONNECTION_ID/webhook" \
+  -H "Content-Type: application/json" \
+  -H "X-FreeDinner-Webhook-Secret: hook-secret" \
+  -d '{"post_type":"message","message_type":"group","message_id":223344,"group_id":88888,"user_id":10002,"raw_message":"[CQ:at,qq=你的机器人 QQ 号] 帮我总结一下","sender":{"card":"群友A"}}'
+```
+
+查看渠道 inbox / outbox：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/me/channel-connections/$CONNECTION_ID/inbox-events" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -sS "http://localhost:8080/api/v1/me/channel-connections/$CONNECTION_ID/outbox-messages" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+启用 Workspace：
+
+```bash
+curl -sS -X POST http://localhost:8080/api/v1/me/workspace \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sandbox_type":"local_dir","network_policy":"disabled","max_disk_bytes":1073741824,"max_single_file_bytes":52428800,"cpu_limit":"1.0","memory_limit_bytes":536870912}'
+```
+
+查看 Workspace 状态：
+
+```bash
+curl -sS http://localhost:8080/api/v1/me/workspace \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+写入 Workspace 文件：
+
+```bash
+curl -sS -X PUT http://localhost:8080/api/v1/me/workspace/files/content \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/notes/todo.md","content":"今天继续完成 FreeDinnerAgent。"}'
+```
+
+列出 Workspace 文件：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/me/workspace/files?path=/notes" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+读取 Workspace 文件：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/me/workspace/files/content?path=/notes/todo.md" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+执行 Workspace 白名单命令：
+
+```bash
+curl -sS -X POST http://localhost:8080/api/v1/me/workspace/commands \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"cat","args":["notes/todo.md"],"working_dir":"/","timeout_seconds":5}'
+```
+
+查看命令历史：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/me/workspace/commands?limit=20" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 创建会话：

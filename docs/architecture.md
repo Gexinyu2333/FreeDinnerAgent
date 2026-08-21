@@ -8,27 +8,27 @@ FreeDinnerAgent 是一个具备分层记忆能力的 AI 个人助理。用户可
 
 ```text
 React 前端
-  登录 / 对话界面 / 记忆管理 / 任务管理 / 已安排任务 / 渠道连接 / Agent 设置
+  登录 / 对话界面 / 记忆管理 / 任务管理 / 已安排任务 / 渠道连接 / Agent 设置 / Workspace
       |
       | HTTP / JSON
       v
 Go 后端
-  API / Channel Adapter / Scheduler / Agent Harness / ReAct Loop / MemoryManager / Tool Use / 数据访问
+  API / Channel Adapter / Scheduler / Agent Harness / ReAct Loop / MemoryManager / Tool Use / Workspace Sandbox / 数据访问
       |
       +---- LLM API
       +---- Embedding API
       |
       v
 PostgreSQL
-  用户 / 模型配置 / Agent 配置 / 会话 / 消息 / 摘要 / 上下文日志 / 四层记忆 / 任务 / 心跳任务 / 渠道事件 / 工具调用日志
+  用户 / 模型配置 / Agent 配置 / 系统提示词模板 / 会话 / 消息 / 摘要 / 上下文日志 / 四层记忆 / 任务 / 心跳任务 / 渠道事件 / Workspace / 工具调用日志
 ```
 
 系统分为四层：
 
 - 表现层：React 前端负责用户交互、消息展示和记忆管理。
-- 服务层：Go 后端提供 REST API，处理登录鉴权、用户模型配置、会话、消息、记忆、任务、心跳任务和外部渠道接入。
-- Agent 层：负责上下文组装、Bounded ReAct loop、LLM 输出校验、分层记忆检索、工具调用决策、失败兜底和响应处理。
-- 数据层：PostgreSQL 保存用户数据、对话数据、四层记忆、任务、心跳任务、渠道事件和工具调用日志。
+- 服务层：Go 后端提供 REST API，处理登录鉴权、用户模型配置、系统提示词模板、会话、消息、记忆、任务、心跳任务、Workspace 和外部渠道接入。
+- Agent 层：负责上下文组装、Bounded ReAct loop、LLM 输出校验、分层记忆检索、工具调用决策、Workspace 沙箱边界、失败兜底和响应处理。
+- 数据层：PostgreSQL 保存用户数据、对话数据、系统提示词模板、四层记忆、任务、心跳任务、Workspace、渠道事件和工具调用日志。
 
 ## 3. 前端设计
 
@@ -37,13 +37,13 @@ PostgreSQL
 - 对话工作台：左侧会话列表，中间聊天窗口，右侧显示本次使用到的记忆和工具调用结果。
 - 对话整理：用户可手动触发“整理当前对话”，将前几轮压缩成摘要，后续上下文加载摘要而不是早期原文。
 - 记忆管理：按 Working、Profile、Episodic、Procedural、Semantic 分层查看，支持编辑、归档、删除和共享设置。
-- 能力市场：展示 MCP、Skills、Tools、Knowledge Base，支持公共/私有、安装、启用到个人 Agent。
+- 能力市场：展示 MCP、Skills、Tools、Knowledge Base、Channel Adapter 和 System Prompt Template，支持公共/私有、安装、启用到个人 Agent。
 - 任务管理：展示由对话生成的待办事项，支持状态更新。
 - 已安排任务：展示每日简报、每周回顾、跟进监控、提醒等心跳任务，支持启停、立即运行和查看运行记录。
 - 渠道连接：配置 NapCatQQ、Telegram、Discord、飞书等外部聊天入口，设置私聊/群聊触发策略。
 - 知识库页面：上传或录入文档，生成 Semantic Memory，用于 RAG 检索，可选择私有或公共。
 - 登录页面：使用用户名和密码登录，进入后只能查看自己的配置、会话、记忆和任务。
-- 设置页面：配置 OpenAI 或 Anthropic API Key、默认模型、Embedding 成本开关、工具开关和隐私选项。
+- 设置页面：配置 OpenAI 或 Anthropic API Key、默认模型、系统提示词模板、Embedding 成本开关、Workspace 开关、工具开关和隐私选项。
 
 前端核心状态：
 
@@ -54,8 +54,10 @@ PostgreSQL
 - 本轮命中的记忆
 - 工具调用状态
 - 当前用户的 Agent 配置和模型供应商配置
+- 当前用户的系统提示词模板、模板版本和变量配置
 - 当前用户的心跳任务配置和最近运行状态
 - 当前用户的渠道连接、外部会话映射和群聊触发策略
+- 当前用户的 Workspace 状态、配额和最近文件/命令事件
 
 ## 4. 后端模块设计
 
@@ -71,7 +73,9 @@ backend/
   internal/scheduler/     # 心跳任务调度、到期扫描、运行记录和补偿执行
   internal/harness/       # Agent Turn、事件流、取消、审批和执行生命周期
   internal/memory/        # MemoryManager、记忆路由、检索、压缩、更新
-  internal/marketplace/   # MCP、Skills、Tools、Knowledge Base 的市场、安装和 Agent 绑定
+  internal/marketplace/   # MCP、Skills、Tools、Knowledge Base、系统提示词模板的市场、安装和 Agent 绑定
+  internal/prompt/        # 系统提示词模板、版本、变量渲染和 Agent 绑定
+  internal/workspace/     # 用户级 Workspace、文件操作、CLI 沙箱和资源配额
   internal/tool/          # 工具注册与执行
   internal/store/         # 数据库访问层
   internal/config/        # 配置加载
@@ -92,14 +96,16 @@ backend/
 7. Memory Router 判断本轮是否需要启用情景记忆、程序记忆或语义知识库。
 8. Retrieval Engine 按层检索 Working、Profile、Episodic、Procedural、Semantic Memory。
 9. Memory Compressor 对召回片段压缩和截断，控制 Token。
-10. 后端进入 Bounded ReAct loop，按 Reason、Act、Observe、Finalize 推进。
-11. LLM 输出先进入 Validator，校验 JSON、工具参数、安全边界和最终回复声明。
-12. 如果需要工具调用，Tool Router 选择候选工具，Tool Executor 校验参数、处理审批、超时、重试和降级。
-13. 如果 LLM 输出不稳定，Fallback Manager 先修复，再重试，必要时压缩上下文、禁用异常工具或生成保守兜底回复。
-14. 后端保存助手回复、loop step、输出校验、降级事件、工具调用日志和本轮使用到的记忆召回记录。
-15. Curator 异步复盘本轮交互，更新情景记忆、用户画像记忆、程序技能或语义向量。
-16. Dreaming Engine 在空闲或定时阶段离线整理记忆，合并重复记忆、归档低价值记忆、提炼技能候选。
-17. 前端展示最终结果和事件流。
+10. Context Builder 加载系统提示词模板版本，渲染变量，并拼入用户覆盖提示词、记忆策略、工具策略、渠道策略和 Workspace 策略。
+11. 后端进入 Bounded ReAct loop，按 Reason、Act、Observe、Finalize 推进。
+12. LLM 输出先进入 Validator，校验 JSON、工具参数、安全边界、Workspace 边界和最终回复声明。
+13. 如果需要工具调用，Tool Router 选择候选工具，Tool Executor 校验参数、处理审批、超时、重试和降级。
+14. 如果需要文件或 CLI 操作，Workspace Tool 只能在当前用户启用的 sandbox 内执行。
+15. 如果 LLM 输出不稳定，Fallback Manager 先修复，再重试，必要时压缩上下文、禁用异常工具或生成保守兜底回复。
+16. 后端保存助手回复、loop step、输出校验、降级事件、工具调用日志、Workspace 事件和本轮使用到的记忆召回记录。
+17. Curator 异步复盘本轮交互，更新情景记忆、用户画像记忆、程序技能或语义向量。
+18. Dreaming Engine 在空闲或定时阶段离线整理记忆，合并重复记忆、归档低价值记忆、提炼技能候选。
+19. 前端展示最终结果和事件流。
 
 心跳任务流程：
 
@@ -161,6 +167,10 @@ Token 控制策略：
 
 详细设计见 [多轮上下文与 Token 控制设计](context-token-design.md)。
 
+系统提示词不只是一段固定文本，而是可以作为能力市场中的 System Prompt Template 进行管理。用户可以选择系统内置模板、公共模板或自己的私有模板，并锁定具体版本。Context Builder 会加载模板版本、渲染变量、拼入用户自定义覆盖内容，再和记忆、工具、MCP、Skills、渠道策略以及 Workspace 策略组合成本轮上下文。
+
+系统提示词模板属于能力市场的一类能力，详细设计见 [能力市场设计](capability-market-design.md)。
+
 ## 7. Agent Loop 与可靠性设计
 
 Agent loop 使用 Bounded ReAct：
@@ -220,7 +230,7 @@ Reason -> Validate -> Act -> Observe -> Reason -> ... -> Finalize
 
 详细设计见 [工具调用设计](tool-calling-design.md)。
 
-MCP、Skills、Tools、Knowledge Base 通过统一能力市场管理，公共能力所有用户可见，私有能力仅本人可见，用户安装后可绑定到自己的 Agent。详细设计见 [能力市场设计](capability-market-design.md)。
+MCP、Skills、Tools、Knowledge Base、Channel Adapter 和 System Prompt Template 通过统一能力市场管理，公共能力所有用户可见，私有能力仅本人可见，用户安装后可绑定到自己的 Agent。系统提示词模板和 Skills 不同：系统提示词模板定义 Agent 的长期身份和边界，Skills 定义具体任务流程。Agent 配置可以绑定某个模板版本，也可以在其上添加用户自己的覆盖提示词。详细设计见 [能力市场设计](capability-market-design.md)。
 
 ## 9. 心跳任务与主动助理设计
 
@@ -251,7 +261,22 @@ MCP、Skills、Tools、Knowledge Base 通过统一能力市场管理，公共能
 
 详细设计见 [多渠道入口设计](channel-adapter-design.md)。
 
-## 11. 数据隔离与隐私保护
+## 11. 用户级 Workspace Sandbox 设计
+
+Workspace Sandbox 让 Agent 可以在用户授权的独立工作区内处理文件、运行代码和生成产物。每个用户可以选择是否启用 workspace；启用后后端为其创建独立目录或容器，并按用户配置限制磁盘、文件数、命令超时、输出大小、网络访问和生命周期。
+
+核心原则：
+
+- Agent 只能读写当前用户 workspace 内的文件。
+- CLI 操作必须通过受控 workspace tool 执行，不能裸跑宿主机命令。
+- 网络默认关闭，需要用户显式开启或配置白名单。
+- 所有文件操作、命令执行、配额超限和销毁操作都写审计日志。
+- 长时间不活跃的 workspace 可以进入 idle、archived 或 destroyed 状态。
+- MVP 可以从本地目录隔离开始，生产环境建议升级到 Docker/Podman/nsjail/Firecracker 等更强 sandbox。
+
+详细设计见 [用户级 Workspace Sandbox 设计](workspace-sandbox-design.md)。
+
+## 12. 数据隔离与隐私保护
 
 - 所有核心表都保存 `user_id`。
 - 后端所有查询必须按 `user_id` 过滤。
@@ -267,13 +292,16 @@ MCP、Skills、Tools、Knowledge Base 通过统一能力市场管理，公共能
 - 渠道连接默认私有，外部账号、token、secret 加密保存。
 - 群聊消息默认只在 @Agent 或命中白名单策略时触发 Agent。
 - 外发社交消息进入 `channel_outbox_messages`，高风险消息需要审批或草稿确认。
+- 系统提示词模板默认私有，公开模板发布前需要显式确认；Agent 配置绑定具体模板版本，避免公共模板更新导致行为漂移。
+- Workspace 默认关闭；开启后只能访问当前用户 workspace，文件路径、命令、网络和配额都需要校验。
+- Workspace CLI 执行必须记录审计日志，生产环境必须使用容器或更强 sandbox 隔离。
 - Dreaming 默认只处理当前用户私有记忆，高风险修改先生成建议，不直接应用。
 - 工具只能通过 MemoryManager 请求读写记忆，不能直接写数据库。
 - 日志中避免记录完整敏感内容。
 - 用户可删除记忆和会话。
 - 未来可增加本地加密或字段级加密。
 
-## 12. 可扩展性
+## 13. 可扩展性
 
 新增记忆层或记忆类型：
 
@@ -307,6 +335,21 @@ MCP、Skills、Tools、Knowledge Base 通过统一能力市场管理，公共能
 - 在能力市场中发布 `channel_adapter`。
 - 增加私聊、群聊 @、限频、失败重试和外发审批测试。
 
+新增系统提示词模板：
+
+- 新增 `system_prompt_templates` 和 `system_prompt_template_versions`。
+- 在能力市场中发布 `system_prompt_template`。
+- Agent 配置绑定具体模板版本，避免公共模板更新导致行为漂移。
+- Context Builder 渲染模板变量，并写入 `context_build_items` 便于审计。
+- 增加模板 fork、版本升级、变量缺失和越权提示词检测测试。
+
+新增 Workspace Sandbox 能力：
+
+- 新增 workspace 配置、文件索引、命令执行和审计事件表。
+- 在 Tool Registry 注册 workspace 文件和 CLI 工具。
+- MVP 阶段使用本地目录隔离，生产阶段升级到 Docker/Podman/nsjail/Firecracker。
+- 增加路径逃逸、超时、输出截断、网络策略、磁盘配额和不活跃销毁测试。
+
 更换模型：
 
 - 用户在设置页新增或更新 OpenAI、Anthropic 模型供应商配置。
@@ -322,12 +365,14 @@ MCP、Skills、Tools、Knowledge Base 通过统一能力市场管理，公共能
 - 如果文档规模增长，可切换到 Qdrant、Chroma 或 Pinecone。
 - 后端通过统一 Retrieval Engine 屏蔽向量库差异。
 
-## 13. 测试规划
+## 14. 测试规划
 
 - 后端单元测试：Memory Router、记忆检索、工具参数校验、上下文组装。
 - Agent loop 测试：最大步数终止、格式修复、LLM 重试、工具失败降级、审批中断恢复。
 - 后端接口测试：会话、消息、记忆、任务 API。
 - Scheduler 测试：心跳任务创建、下一次运行时间计算、立即运行、连续失败暂停。
 - Channel 测试：NapCatQQ 入站事件去重、群聊触发策略、外部会话映射、外发消息审批和失败重试。
+- Prompt Market 测试：模板版本锁定、变量渲染、公共模板 fork、Agent 配置绑定和上下文注入顺序。
+- Workspace Sandbox 测试：路径逃逸拦截、用户目录隔离、CLI 超时、stdout/stderr 截断、网络策略和配额限制。
 - 前端组件测试：消息列表、输入框、记忆面板。
 - 端到端测试：发送消息、生成回复、保存画像记忆、检索情景记忆、命中程序技能、引用语义知识库。
