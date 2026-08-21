@@ -119,6 +119,9 @@ PATCH /api/v1/me/agent-config
   "system_prompt": "你是一个具备长期记忆能力的个人 AI 助理。",
   "default_provider_id": "uuid",
   "temperature": 0.7,
+  "thinking_enabled": false,
+  "thinking_effort": "medium",
+  "thinking_budget_tokens": 0,
   "max_context_tokens": 12000,
   "max_loop_steps": 6,
   "llm_retry_limit": 2,
@@ -130,6 +133,7 @@ PATCH /api/v1/me/agent-config
   },
   "memory_enabled": true,
   "tool_use_enabled": true,
+  "tool_approval_policy": "sensitive_only",
   "dreaming_enabled": true,
   "semantic_memory_enabled": true,
   "embedding_enabled": false,
@@ -140,6 +144,12 @@ PATCH /api/v1/me/agent-config
   }
 }
 ```
+
+`tool_approval_policy` 支持三档：
+
+- `always`：所有工具调用都进入审批。
+- `sensitive_only`：默认值，仅敏感、破坏性或工具自身要求审批的调用进入审批。
+- `never`：所有工具调用直接执行，适合本地开发或完全信任的私有环境。
 
 ### 获取我的模型供应商配置
 
@@ -340,16 +350,16 @@ POST /api/v1/conversations/{conversation_id}/messages
 
 ## 6. 记忆接口
 
-### 获取记忆列表
+### 获取 Profile Memory 类型
 
 ```http
-GET /api/v1/memories?type=preference&status=active
+GET /api/v1/memory-types
 ```
 
-### 创建记忆
+### 创建 Profile Memory
 
 ```http
-POST /api/v1/memories
+POST /api/v1/profile-memories
 ```
 
 请求：
@@ -363,17 +373,62 @@ POST /api/v1/memories
 }
 ```
 
-### 更新记忆
+### 获取 Profile Memory 列表
 
 ```http
-PATCH /api/v1/memories/{memory_id}
+GET /api/v1/profile-memories?memory_type=preference
 ```
 
-### 删除记忆
+### 检索 Profile Memory
 
 ```http
-DELETE /api/v1/memories/{memory_id}
+GET /api/v1/profile-memory-search?q=回答风格&limit=8
 ```
+
+### 预览本轮记忆上下文
+
+```http
+GET /api/v1/memory-context?conversation_id={conversation_id}&q=根据知识库和我的偏好回答&max_memory_tokens=1200
+```
+
+该接口用于调试 MemoryManager 的召回结果，会统一返回 Working、Profile、Semantic 等记忆块：
+
+```json
+{
+  "chunks": [
+    {
+      "layer": "profile",
+      "ref_id": "uuid",
+      "content": "回答风格偏好：用户喜欢先给结论。",
+      "score": 0.72,
+      "token_count": 18,
+      "visibility": "private",
+      "source": "preference",
+      "load_mode": "standard"
+    }
+  ],
+  "token_count": 18,
+  "used_layers": ["profile"],
+  "skipped": ["working", "semantic"]
+}
+```
+
+### 手动压缩当前对话
+
+```http
+POST /api/v1/conversations/{conversation_id}/compress
+```
+
+请求：
+
+```json
+{
+  "keep_recent_turns": 8,
+  "target_summary_type": "turn_window"
+}
+```
+
+该接口不会删除原始 `messages`，只会把较早轮次整理为 `conversation_summaries`，并写入一条 `conversation_compression_jobs` 记录。
 
 ## 7. 任务接口
 
@@ -455,10 +510,9 @@ GET /api/v1/scheduled-agent-job-templates
 daily_brief
 weekly_review
 follow_up_monitor
-reminder
-content_digest
-social_assist
 ```
+
+`reminder`、`content_digest`、`social_assist` 作为任务类型已预留，模板后续扩展。
 
 ### 创建心跳任务
 
@@ -499,7 +553,7 @@ POST /api/v1/scheduled-agent-jobs
 PATCH /api/v1/scheduled-agent-jobs/{job_id}
 ```
 
-可更新标题、说明、周期、时间、上下文策略、工具策略和状态。
+可更新标题、说明、周期、时间、上下文策略和工具策略。未传字段保持原值。更新周期、时间、星期或时区后，后端会重新计算 `next_run_at`。`cron` 任务支持 5 字段 MVP 解析，覆盖数字、`*`、逗号、范围和步长。
 
 ### 暂停心跳任务
 
@@ -688,11 +742,15 @@ GET /api/v1/tool-calls/{tool_call_id}
 POST /api/v1/tool-approval-requests/{approval_id}/approve
 ```
 
+批准会将 approval request 标记为 `approved`，并在对应 `tool_call_logs.approved_at` 写入时间。后续 Agent Harness 恢复机制会继续执行已批准工具。
+
 ### 拒绝工具调用
 
 ```http
 POST /api/v1/tool-approval-requests/{approval_id}/reject
 ```
+
+拒绝会将 approval request 标记为 `rejected`，并把对应 `tool_call_logs.status` 标记为 `cancelled`。
 
 工具涉及敏感或破坏性操作时，后端会先创建审批请求，并将 Agent Turn 标记为 `waiting_approval`。用户审批后，后端继续执行或取消该工具调用。
 
@@ -822,12 +880,18 @@ POST /api/v1/channel-outbox-messages/{outbox_id}/cancel
 
 群聊消息、社交辅助消息和高风险外发默认进入 outbox 等待审批或草稿确认。
 
+```text
+POST /api/v1/channel-outbox-messages/{outbox_id}/send
+```
+
+发送已批准的 outbox 消息。当前 NapCatQQ/OneBot 适配会调用连接配置中的 `endpoint + /send_msg`，成功后回写 `status = sent` 和外部消息 ID，失败后回写 `status = failed` 与错误信息。
+
 ## 12. 能力市场接口
 
 ### 获取能力市场列表
 
 ```http
-GET /api/v1/marketplace?type=skill&visibility=public
+GET /api/v1/marketplace-items?item_type=skill&installed=false&limit=50
 ```
 
 能力类型包括：
@@ -838,12 +902,13 @@ mcp_server
 skill
 knowledge_base
 channel_adapter
+system_prompt_template
 ```
 
 ### 安装能力
 
 ```http
-POST /api/v1/marketplace/{item_id}/install
+POST /api/v1/marketplace-items/{item_id}/install
 ```
 
 响应：
@@ -860,22 +925,34 @@ POST /api/v1/marketplace/{item_id}/install
 }
 ```
 
-### 卸载能力
+### 给能力评分
 
 ```http
-DELETE /api/v1/me/capability-installs/{install_id}
+POST /api/v1/marketplace-items/{item_id}/rate
 ```
 
-### 获取我的已安装能力
+请求：
+
+```json
+{
+  "rating": 5,
+  "comment": "适合日常助理场景。"
+}
+```
+
+同一用户对同一个能力重复评分会覆盖旧评分，并回算市场条目的平均分。
+
+### 启用或停用已安装能力
 
 ```http
-GET /api/v1/me/capability-installs
+POST /api/v1/capability-installs/{install_id}/enable
+POST /api/v1/capability-installs/{install_id}/disable
 ```
 
 ### 将能力启用到我的 Agent
 
 ```http
-POST /api/v1/me/agent-config/capabilities
+POST /api/v1/agent-capability-bindings
 ```
 
 请求：
@@ -892,16 +969,65 @@ POST /api/v1/me/agent-config/capabilities
 ### 更新 Agent 能力绑定
 
 ```http
-PATCH /api/v1/me/agent-config/capabilities/{binding_id}
+POST /api/v1/agent-capability-bindings/{binding_id}/enable
+POST /api/v1/agent-capability-bindings/{binding_id}/disable
+```
+
+### 创建系统提示词模板
+
+```http
+POST /api/v1/system-prompt-templates
 ```
 
 请求：
 
 ```json
 {
-  "is_enabled": true,
-  "load_mode": "standard",
-  "priority": 20
+  "name": "research_assistant",
+  "display_name": "研究助理",
+  "description": "适合论文阅读和课题整理的系统提示词。",
+  "category": "research",
+  "tags": ["research", "summary"],
+  "visibility": "private",
+  "content": "你是 {agent_name}，请用 {language} 回答，并优先保持严谨。",
+  "variables": [
+    {
+      "name": "agent_name",
+      "display_name": "Agent 名称",
+      "value_type": "string",
+      "required": true,
+      "default_value": "小饭"
+    },
+    {
+      "name": "language",
+      "display_name": "回答语言",
+      "value_type": "enum",
+      "required": true,
+      "default_value": "中文",
+      "allowed_values": ["中文", "English"]
+    }
+  ]
+}
+```
+
+如果不传 `variables`，后端会从模板内容中的 `{variable}` 自动生成基础 string 变量定义。预览时会校验 required、number、boolean、enum 和 json 类型。
+
+### 预览系统提示词模板
+
+```http
+POST /api/v1/system-prompt-templates/preview
+```
+
+请求：
+
+```json
+{
+  "version_id": "uuid",
+  "variables": {
+    "agent_name": "小饭",
+    "language": "中文"
+  },
+  "override": "回答时先给结论。"
 }
 ```
 
@@ -930,7 +1056,7 @@ PATCH /api/v1/me/mcp-servers/{mcp_server_id}/settings
 ### 获取系统提示词模板市场
 
 ```http
-GET /api/v1/system-prompt-templates?visibility=public&category=assistant
+GET /api/v1/marketplace-items?item_type=system_prompt_template&installed=false
 ```
 
 返回公共模板和当前用户自己的私有模板。
@@ -945,29 +1071,18 @@ POST /api/v1/system-prompt-templates
 
 ```json
 {
+  "name": "study_assistant",
   "display_name": "学习型个人助理",
   "description": "适合课程复习、资料整理和项目推进的系统提示词。",
   "category": "study",
   "tags": ["study", "planner"],
-  "visibility": "private"
-}
-```
-
-### 创建模板版本
-
-```http
-POST /api/v1/system-prompt-templates/{template_id}/versions
-```
-
-请求：
-
-```json
-{
+  "visibility": "private",
   "content": "你是 {user_display_name} 的学习型个人助理，回答时先给结论，再给步骤。",
   "change_note": "初始版本",
   "variables": [
     {
       "name": "user_display_name",
+      "display_name": "用户昵称",
       "value_type": "string",
       "required": true,
       "default_value": "用户"
@@ -979,19 +1094,18 @@ POST /api/v1/system-prompt-templates/{template_id}/versions
 ### 绑定模板到我的 Agent
 
 ```http
-PATCH /api/v1/me/agent-config/system-prompt
+POST /api/v1/agent-capability-bindings
 ```
 
 请求：
 
 ```json
 {
-  "system_prompt_template_id": "uuid",
-  "system_prompt_template_version_id": "uuid",
-  "system_prompt_variables": {
-    "user_display_name": "Gexin"
-  },
-  "custom_system_prompt_override": "回答尽量简洁，但保留关键推理步骤。"
+  "agent_config_id": "uuid",
+  "capability_type": "system_prompt_template",
+  "capability_ref_id": "system_prompt_template_version_uuid",
+  "load_mode": "full",
+  "priority": 100
 }
 ```
 
@@ -1000,10 +1114,10 @@ Agent 绑定的是具体模板版本。公共模板发布新版本后，不会�
 ### 预览最终系统提示词
 
 ```http
-POST /api/v1/me/agent-config/system-prompt/preview
+POST /api/v1/system-prompt-templates/preview
 ```
 
-该接口返回模板、变量、用户覆盖内容和系统策略拼接后的预览，用于前端确认。
+该接口返回模板版本、变量定义、替换后的内容和粗略 token 数，用于前端确认。
 
 ## 14. Workspace Sandbox 接口
 
@@ -1048,11 +1162,16 @@ PATCH /api/v1/me/workspace
 
 ```json
 {
+  "sandbox_type": "docker",
   "network_policy": "allowlist",
   "network_allowlist": ["github.com", "registry.npmjs.org"],
-  "max_command_seconds": 60
+  "max_command_seconds": 60,
+  "cpu_limit": "1.0",
+  "memory_limit_bytes": 536870912
 }
 ```
+
+未传字段保持原值。`network_allowlist` 传空数组表示清空允许列表，省略该字段表示不变。
 
 ### 列出文件
 
@@ -1113,7 +1232,7 @@ GET /api/v1/me/workspace/commands?limit=50
 ### 销毁 Workspace
 
 ```http
-DELETE /api/v1/me/workspace
+DELETE /api/v1/me/workspace?remove_files=false
 ```
 
-销毁前可以选择归档或直接删除。MVP 阶段建议只支持用户手动销毁。
+默认只将 workspace 标记为 `destroyed`，不删除物理目录。只有显式传 `remove_files=true` 时才会删除当前用户 workspace 目录；删除前必须确认目录仍在配置的 `WORKSPACE_ROOT` 内。

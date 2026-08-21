@@ -85,6 +85,27 @@ type AgentLoopStepCreate struct {
 	Status         string
 }
 
+type LLMOutputValidationCreate struct {
+	TurnID         string
+	LoopStepID     *string
+	UserID         string
+	ValidationType string
+	Status         string
+	FailureReason  *string
+	RepairPrompt   *string
+	RepairedOutput *string
+	AttemptNo      int
+}
+
+type AgentFallbackEventCreate struct {
+	TurnID       string
+	LoopStepID   *string
+	UserID       string
+	FallbackType string
+	Reason       string
+	ActionTaken  string
+}
+
 type HarnessStore struct {
 	db *pgxpool.Pool
 }
@@ -130,6 +151,19 @@ func (s *HarnessStore) FinishTurn(ctx context.Context, turnID, userID, conversat
 		          created_at, started_at, finished_at
 	`
 	return scanAgentTurn(s.db.QueryRow(ctx, query, turnID, userID, conversationID, status, assistantMessageID, errorMessage))
+}
+
+func (s *HarnessStore) SetTurnStatus(ctx context.Context, turnID, userID, conversationID, status string, errorMessage *string) (AgentTurn, error) {
+	query := `
+		UPDATE agent_turns
+		SET status = $4,
+		    error_message = $5
+		WHERE id = $1 AND user_id = $2 AND conversation_id = $3
+		RETURNING id, user_id, conversation_id, user_message_id, assistant_message_id, agent_config_id,
+		          provider_id, status, cancel_requested, context_build_id, error_message,
+		          created_at, started_at, finished_at
+	`
+	return scanAgentTurn(s.db.QueryRow(ctx, query, turnID, userID, conversationID, status, errorMessage))
 }
 
 func (s *HarnessStore) AddEvent(ctx context.Context, input AgentEventCreate) (AgentEvent, error) {
@@ -180,6 +214,40 @@ func (s *HarnessStore) FinishLoopStep(ctx context.Context, stepID, userID, conve
 		          created_at, finished_at
 	`
 	return scanAgentLoopStep(s.db.QueryRow(ctx, query, stepID, userID, conversationID, status, observation, errorMessage))
+}
+
+func (s *HarnessStore) SetLoopStepActionRef(ctx context.Context, stepID, userID, conversationID string, actionRefID *string) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE agent_loop_steps
+		SET action_ref_id = $4
+		WHERE id = $1 AND user_id = $2 AND conversation_id = $3
+	`, stepID, userID, conversationID, actionRefID)
+	return err
+}
+
+func (s *HarnessStore) CreateValidation(ctx context.Context, input LLMOutputValidationCreate) error {
+	if input.AttemptNo <= 0 {
+		input.AttemptNo = 1
+	}
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO llm_output_validations (
+			id, turn_id, loop_step_id, user_id, validation_type, status,
+			failure_reason, repair_prompt, repaired_output, attempt_no
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, uuid.NewString(), input.TurnID, input.LoopStepID, input.UserID, input.ValidationType, input.Status,
+		input.FailureReason, input.RepairPrompt, input.RepairedOutput, input.AttemptNo)
+	return err
+}
+
+func (s *HarnessStore) CreateFallbackEvent(ctx context.Context, input AgentFallbackEventCreate) error {
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO agent_fallback_events (
+			id, turn_id, loop_step_id, user_id, fallback_type, reason, action_taken
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, uuid.NewString(), input.TurnID, input.LoopStepID, input.UserID, input.FallbackType, input.Reason, input.ActionTaken)
+	return err
 }
 
 func (s *HarnessStore) GetTurn(ctx context.Context, userID, conversationID, turnID string) (AgentTurn, error) {

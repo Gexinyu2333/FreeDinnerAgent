@@ -271,3 +271,45 @@ NapCatQQ MCP Server
 - Discord Bot。
 
 这样既有明确 MVP，又能自然扩展到更多入口。
+
+## 11. 当前后端 MVP 实现范围
+
+当前已落地：
+
+- 数据库已包含 `channel_provider_definitions`、`channel_connections`、`channel_policies`、`external_conversations`、`channel_inbox_events`、`channel_outbox_messages`。
+- 内置 NapCatQQ / OneBot provider，支持 webhook 和 websocket 作为入站模式声明，支持文本 `send_message` 作为出站模式声明。
+- 新增 `ChannelAdapter` 接口，NapCatQQ 以 `OneBotAdapter` 实现 `VerifyInbound`、`NormalizeEvent`、`BuildSendPayload`、`HealthCheck`。
+- 支持创建用户级 `channel_connection`，敏感配置通过加密 JSON 保存。
+- 创建连接时默认生成私聊 `auto_reply` 策略和群聊 `mention_only` 策略。
+- Webhook 已支持 OneBot 私聊、群聊事件规范化，群聊会移除 Bot mention。
+- 已支持 `disabled`、`silent_listen`、`mention_only`、`keyword`、`auto_reply` 触发策略。
+- `quiet_hours` 已生效，静默时段内不会触发 Agent。
+- 入站事件会先写入 `channel_inbox_events`，再根据策略决定是否创建本地 conversation/message。
+- 触发后会创建或复用 `external_conversations`，并把 QQ 消息写入本地 `messages`。
+- 出站回复会调用 Agent Loop 生成真实 assistant message，写入 `channel_outbox_messages`，并生成 OneBot `send_msg` payload；群聊默认 `pending`，私聊默认 `approved`。
+- 已支持用户审批或取消 pending outbox 草稿：`POST /api/v1/channel-outbox-messages/{outbox_id}/approve|cancel`。
+- 已支持显式发送 approved outbox：`POST /api/v1/channel-outbox-messages/{outbox_id}/send` 会调用 NapCat/OneBot `/send_msg` endpoint，并回写 `sent` 或 `failed`。
+
+当前仍留给后续 Channel 增强阶段：
+
+- 后端已支持显式发送 approved outbox，但还没有启动轮询 outbox 的后台 sender worker。
+- 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截；后续可升级为多窗口限频、用户级配额和频道级熔断。
+- 图片、文件、卡片消息目前只预留 `message_type`，还没有附件摘要和发送实现。
+- QQ MCP tools 还未实现，当前 Channel Adapter 负责入口、Agent Loop 回复、outbox 草稿和显式发送。
+
+强制暂缓：
+
+- Telegram、Discord、飞书、微信等具体 Adapter 暂缓实现，和 Workspace Sandbox 强隔离项一样，不进入当前 MVP 开发范围。
+- 多平台具体协议、第三方平台审核、复杂权限申请、平台风控规避策略暂缓实现；当前只保留通用抽象和 NapCatQQ/OneBot 作为首个验证入口。
+
+前端入口设计建议：
+
+- Web Chat 和 Channel Adapter 不共用同一个“新建对话”入口。
+- Web Chat 是用户主动发起的 session：用户在某个会话里输入 query，才触发一次 Agent Loop。
+- Channel Adapter 是外部事件监听入口：QQ/微信群/Telegram/Discord 等外部消息进入后，按策略自动触发或静默记录。
+- 前端单独做一个“入口 / Channels”页面，用户在这里选择 QQ、微信、Telegram、Discord、飞书等 provider，配置连接、策略、审批和监听状态。
+- 每个 `channel_connection` 默认绑定一个专用监听会话，也可以理解为这个入口的“主控会话”。这个会话用于展示该入口的运行日志、关键 inbound/outbox、配置变更和人工介入记录。
+- 外部私聊、群聊、频道线程仍通过 `external_conversations` 映射到本地 `conversations`，但这些会话在 UI 上归属于对应 Channel connection，而不是散落在普通 Web Chat 列表里。
+- 普通 Web Chat 列表只展示用户主动创建的对话；Channel 会话在 Channels 页面内展示，可提供“打开对应会话”入口，但需要有明显 channel 标识，避免用户误以为这是普通手动聊天。
+- 一个 adapter connection 可以监听多个外部 scope，例如多个 QQ 群；每个 scope 有独立策略、限频和 outbox 审批状态，但共享同一个连接配置和主控会话。
+- 如果用户希望某个外部群/私聊使用不同 Agent 配置，优先在 `channel_policies.agent_config_id` 上覆盖，而不是为每个群创建一个独立 adapter。

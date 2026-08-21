@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,11 +136,12 @@ func (s *ConversationStore) CreateUserMessage(ctx context.Context, userID, conve
 		return Message{}, err
 	}
 
+	isAnchor, anchorReason := detectAnchor(content)
 	userMessage, err := scanMessage(tx.QueryRow(ctx, `
-		INSERT INTO messages (id, conversation_id, user_id, role, content, metadata)
-		VALUES ($1, $2, $3, 'user', $4, '{}'::jsonb)
+		INSERT INTO messages (id, conversation_id, user_id, role, content, token_count, is_anchor, anchor_reason, metadata)
+		VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, '{}'::jsonb)
 		RETURNING id, conversation_id, user_id, role, content, token_count, is_anchor, anchor_reason, metadata, created_at
-	`, uuid.NewString(), conversationID, userID, content))
+	`, uuid.NewString(), conversationID, userID, content, estimateMessageTokens(content), isAnchor, anchorReason))
 	if err != nil {
 		return Message{}, err
 	}
@@ -161,10 +163,10 @@ func (s *ConversationStore) CreateAssistantMessage(ctx context.Context, userID, 
 	}
 
 	message, err := scanMessage(s.db.QueryRow(ctx, `
-		INSERT INTO messages (id, conversation_id, user_id, role, content, metadata)
-		VALUES ($1, $2, $3, 'assistant', $4, $5)
+		INSERT INTO messages (id, conversation_id, user_id, role, content, token_count, metadata)
+		VALUES ($1, $2, $3, 'assistant', $4, $5, $6)
 		RETURNING id, conversation_id, user_id, role, content, token_count, is_anchor, anchor_reason, metadata, created_at
-	`, uuid.NewString(), conversationID, userID, content, metadata))
+	`, uuid.NewString(), conversationID, userID, content, estimateMessageTokens(content), metadata))
 	if err != nil {
 		return Message{}, err
 	}
@@ -173,6 +175,62 @@ func (s *ConversationStore) CreateAssistantMessage(ctx context.Context, userID, 
 		return Message{}, err
 	}
 	return message, nil
+}
+
+func detectAnchor(content string) (bool, *string) {
+	lowered := strings.ToLower(content)
+	conflictKeywords := []string{
+		"不是",
+		"不对",
+		"错了",
+		"纠正",
+		"改成",
+		"改为",
+		"取消",
+		"撤销",
+		"以后别",
+		"以后不要",
+		"actually",
+		"correction",
+		"not anymore",
+		"change it to",
+	}
+	for _, keyword := range conflictKeywords {
+		if strings.Contains(lowered, keyword) {
+			reason := "correction_or_conflict"
+			return true, &reason
+		}
+	}
+	keywords := map[string]string{
+		"记住":        "explicit_memory_request",
+		"以后":        "future_preference",
+		"偏好":        "preference",
+		"喜欢":        "preference",
+		"不喜欢":       "preference",
+		"习惯":        "habit",
+		"目标":        "goal",
+		"重要":        "important",
+		"必须":        "constraint",
+		"不要":        "constraint",
+		"always":    "constraint",
+		"never":     "constraint",
+		"remember":  "explicit_memory_request",
+		"important": "important",
+	}
+	for keyword, reason := range keywords {
+		if strings.Contains(lowered, keyword) {
+			return true, &reason
+		}
+	}
+	return false, nil
+}
+
+func estimateMessageTokens(content string) int {
+	runes := len([]rune(content))
+	if runes == 0 {
+		return 0
+	}
+	return runes/3 + 1
 }
 
 func scanConversation(row pgx.Row) (Conversation, error) {

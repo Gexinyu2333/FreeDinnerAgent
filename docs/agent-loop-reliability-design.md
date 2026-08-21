@@ -433,7 +433,34 @@ MemoryManager 或 Curator 决定是否写入、合并、归档或等待用户确
 
 后续再加 provider fallback、shadow validator、dry run 和更细的 answer contract。
 
-## 16. 参考资料
+## 16. 当前后端 MVP 实现范围
+
+截至当前后端实现，Agent Loop 已从“单次 LLM 回复”升级为可观测的 Bounded ReAct MVP：
+
+- `backend/internal/agent` 提供结构化 action、输出校验、JSON 修复、工具路由、兜底策略与单元测试。
+- `backend/internal/llm.Service.SendMessage` 已接入 ReAct loop：构建上下文、路由工具、请求模型输出 JSON action、校验/修复/重试、执行工具或检索记忆、回填 observation、生成最终回复。
+- 每个 turn 会写入 `agent_turns`、`agent_events`、`agent_loop_steps`，LLM 输出校验写入 `llm_output_validations`，兜底写入 `agent_fallback_events`。
+- Tool Router 会把候选工具、选中工具、路由原因和风险等级写入 `tool_router_logs`。工具不再完全由模型自由选择，模型只能在后端披露的候选工具集合内请求调用。
+- 工具调用 observation 会回填到下一轮上下文；工具失败时 observation 标记失败，模型不能把失败工具说成成功。
+- 需要审批的工具会让 turn 进入 `waiting_approval`，并返回一条等待用户确认的 assistant message。
+- MemoryManager 已接入上下文构建与 loop 内 `memory_search` action：支持 working/profile/semantic 检索、token 压缩和 retrieval log。
+- `messages.is_anchor` 已支持规则版自动识别：用户表达“记住、以后、偏好、重要、必须/不要”等稳定约束时，会标记 anchor 与原因，供后续摘要和压缩策略保留。
+- 每轮成功回复后会同时写入轻量 `last_episode` working memory 和真实 `episodes` 记录，并创建 `curator_jobs.episode_summary`。当输入呈现“流程、以后、习惯、skill”等信号时，会额外创建 `curator_jobs.dreaming`。
+- Skill 自动披露已接入 Context Builder：后端按 `skills.trigger_keywords` / 名称 / 描述匹配 `skill_disclosure_sections`，以 light 模式注入 `Procedural Skills` 区块，并写入 `context_build_items.item_type = procedural_skill`。
+- Dreaming executor 已有规则版 MVP：`memory.Manager.RunDreaming` 会创建 `dreaming_sessions`、生成 `dreaming_insights`，并完成 session 状态更新。当前是规则洞察，后续可换成 LLM/embedding 驱动的离线复盘。
+- MCP runtime 已有代码层骨架：`internal/mcp.Runtime` 可以根据 MCP definition metadata 和用户启用设置发现 tool specs。真实 stdio/http MCP client、进程生命周期、资源枚举和 tool sync worker 后续接入。
+- Channel webhook 已接入 Agent Loop 生成真实回复并写入 `channel_outbox_messages`；outbox sender 支持显式发送已批准消息到 NapCat/OneBot `/send_msg` endpoint，并回写 `sent/failed`。
+
+当前仍后置：
+
+- Provider fallback：当前只记录 `retry_llm` / `repair_output` / `safe_final_answer`，还没有自动切换备用 provider。
+- Shadow Validator 与 Answer Contract claims 校验。
+- LLM 摘要器：当前自动压缩使用规则摘要 `contextmgr.SummarizeMessages`，还没有调用低成本 LLM summarizer。
+- 完整 Procedural Skill 沉淀：当前已能匹配和披露已有 skill，但从 episodes 自动生成新 `skills/skill_versions/skill_disclosure_sections` 仍需后续 Curator。
+- MCP 真实运行时：当前有 discovery/runtime 骨架，没有启动外部 MCP server 或执行 MCP tool。
+- Channel 后台 sender worker：当前有显式发送 API，尚未启动轮询 approved outbox 的后台 worker。
+
+## 17. 参考资料
 
 - [OpenAI Developers: Codex as a platform](https://developers.openai.com/blog/codex-as-a-platform)
 - [OpenAI API: Model guidance](https://developers.openai.com/api/docs/guides/latest-model)

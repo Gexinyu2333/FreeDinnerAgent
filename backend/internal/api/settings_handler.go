@@ -32,12 +32,16 @@ type updateAgentConfigRequest struct {
 	SystemPrompt          *string          `json:"system_prompt"`
 	DefaultProviderID     **string         `json:"default_provider_id"`
 	Temperature           *float64         `json:"temperature"`
+	ThinkingEnabled       *bool            `json:"thinking_enabled"`
+	ThinkingEffort        *string          `json:"thinking_effort"`
+	ThinkingBudgetTokens  *int             `json:"thinking_budget_tokens"`
 	MaxContextTokens      *int             `json:"max_context_tokens"`
 	MaxLoopSteps          *int             `json:"max_loop_steps"`
 	LLMRetryLimit         *int             `json:"llm_retry_limit"`
 	FallbackPolicy        *json.RawMessage `json:"fallback_policy"`
 	MemoryEnabled         *bool            `json:"memory_enabled"`
 	ToolUseEnabled        *bool            `json:"tool_use_enabled"`
+	ToolApprovalPolicy    *string          `json:"tool_approval_policy"`
 	DreamingEnabled       *bool            `json:"dreaming_enabled"`
 	SemanticMemoryEnabled *bool            `json:"semantic_memory_enabled"`
 	EmbeddingEnabled      *bool            `json:"embedding_enabled"`
@@ -82,12 +86,16 @@ func (h *SettingsHandler) UpdateAgentConfig(c *gin.Context) {
 		SystemPrompt:          req.SystemPrompt,
 		DefaultProviderID:     req.DefaultProviderID,
 		Temperature:           req.Temperature,
+		ThinkingEnabled:       req.ThinkingEnabled,
+		ThinkingEffort:        req.ThinkingEffort,
+		ThinkingBudgetTokens:  req.ThinkingBudgetTokens,
 		MaxContextTokens:      req.MaxContextTokens,
 		MaxLoopSteps:          req.MaxLoopSteps,
 		LLMRetryLimit:         req.LLMRetryLimit,
 		FallbackPolicy:        req.FallbackPolicy,
 		MemoryEnabled:         req.MemoryEnabled,
 		ToolUseEnabled:        req.ToolUseEnabled,
+		ToolApprovalPolicy:    req.ToolApprovalPolicy,
 		DreamingEnabled:       req.DreamingEnabled,
 		SemanticMemoryEnabled: req.SemanticMemoryEnabled,
 		EmbeddingEnabled:      req.EmbeddingEnabled,
@@ -293,6 +301,16 @@ func validateAgentConfigRequest(req updateAgentConfigRequest) error {
 	if req.Temperature != nil && (*req.Temperature < 0 || *req.Temperature > 2) {
 		return errors.New("temperature must be between 0 and 2")
 	}
+	if req.ThinkingEffort != nil {
+		switch *req.ThinkingEffort {
+		case "low", "medium", "high":
+		default:
+			return errors.New("thinking_effort must be low, medium or high")
+		}
+	}
+	if req.ThinkingBudgetTokens != nil && *req.ThinkingBudgetTokens < 0 {
+		return errors.New("thinking_budget_tokens must be greater than or equal to 0")
+	}
 	if req.MaxContextTokens != nil && *req.MaxContextTokens <= 0 {
 		return errors.New("max_context_tokens must be greater than 0")
 	}
@@ -301,6 +319,13 @@ func validateAgentConfigRequest(req updateAgentConfigRequest) error {
 	}
 	if req.LLMRetryLimit != nil && *req.LLMRetryLimit < 0 {
 		return errors.New("llm_retry_limit must be greater than or equal to 0")
+	}
+	if req.ToolApprovalPolicy != nil {
+		switch *req.ToolApprovalPolicy {
+		case "never", "sensitive_only", "always":
+		default:
+			return errors.New("tool_approval_policy must be never, sensitive_only or always")
+		}
 	}
 	return nil
 }

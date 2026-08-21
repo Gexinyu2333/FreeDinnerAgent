@@ -252,6 +252,17 @@ LLM 生成 tool call 后，后端不能直接执行。
 
 用户确认后再执行。拒绝则写入 `tool_call_logs.status = cancelled`。
 
+当前后端第一版审批实现：
+
+- 执行前按 active `tool_versions.parameter_schema` 校验参数。
+- 用户可通过 `user_agent_configs.tool_approval_policy` 选择审批模式：
+  - `always`：所有工具调用都需要审批。
+  - `sensitive_only`：默认值，仅 `permission_level = sensitive/destructive` 或 `requires_approval = true` 时需要审批。
+  - `never`：所有工具调用直接执行，适合本地开发或完全信任环境。
+- 后端创建 `tool_call_logs.status = pending` 和 `tool_approval_requests.status = pending`。
+- 用户拒绝后，审批记录变为 `rejected`，对应 `tool_call_logs.status = cancelled`。
+- 用户批准后，审批记录变为 `approved`，对应 tool call 写入 `approved_at`。批准后自动恢复执行工具留给 Agent Harness 恢复机制实现。
+
 审批请求写入：
 
 ```text

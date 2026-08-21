@@ -621,3 +621,29 @@ MVP 阶段建议实现：
 - 哪些知识或技能可多人复用：Public Semantic/Procedural Memory。
 
 这也是 FreeDinnerAgent 区别于普通聊天机器人的核心设计亮点。
+
+## 14. 当前后端 MVP 实现范围
+
+当前已落地：
+
+- 数据库已包含 Working、Profile、Episodic、Procedural、Semantic、Dreaming、Curator 相关表结构。
+- `memory_type_definitions` 已支持新增 Profile Memory 类型，不需要修改 `profile_memories` 表结构。
+- Profile Memory 已支持类型列表、手动写入、列表和关键词检索。
+- Working Memory 已支持按 `conversation_id + memory_key` 覆盖写入和按会话加载。
+- Semantic Memory 已支持文档写入、切片、公共/私有可见性、关键词检索、embedding 开关和 pgvector 召回。
+- 新增 `internal/memory.Manager`，统一输出 `Memory Chunk`，负责基础 Memory Router、Working/Profile/Semantic 检索、去重排序、Token 裁剪和 `memory_retrieval_logs` 写入。
+- 新增 `GET /api/v1/memory-context`，用于预览当前问题会召回哪些记忆块，方便调试 Prompt 上下文。
+
+当前后端进展：
+
+- Agent 对话流程已自动调用 MemoryManager 构建 Prompt，支持 working/profile/semantic memory 注入。
+- 成功 Agent Turn 会自动写入 `episodes`，并创建 `curator_jobs.episode_summary`。
+- Procedural Memory/Skills 已支持 light disclosure 匹配和 Context Builder 注入。
+- Dreaming 已有规则版执行器，可创建 `dreaming_sessions` 和 `dreaming_insights`。
+
+当前仍留给后续 Curator 阶段：
+
+- episode embedding 和相似 episode 向量检索尚未接入。
+- 从 episodes 自动沉淀新 `skills/skill_versions/skill_disclosure_sections` 尚未实现。
+- Dreaming insight 的应用流程、用户确认和自动合并尚未实现。
+- Semantic Memory embedding 当前是同步生成的 MVP；后续应改成 curator 异步任务，只对变更 chunk 重算。

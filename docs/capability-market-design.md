@@ -447,9 +447,8 @@ MVP 第一版可以先做：
 暂缓：
 
 - 公开模板审核流。
-- 模板评分和安装量。
 - A/B 测试。
-- 变量复杂类型校验。
+- 变量的跨字段联动、条件展示等高级校验。
 
 ## 9. Agent 如何使用市场能力
 
@@ -517,3 +516,33 @@ MVP 第一版可以先做：
 - 用户请求外部系统操作，推荐相关 MCP。
 
 推荐来源可以写入 `dreaming_insights`，由用户确认后安装。
+
+## 13. 当前后端 MVP 实现范围
+
+当前已落地：
+
+- 数据库已包含 `marketplace_items`、`user_capability_installs`、`agent_capability_bindings`。
+- 市场能力类型已覆盖 `tool`、`mcp_server`、`skill`、`knowledge_base`、`channel_adapter`、`system_prompt_template`。
+- 新增 `system_prompt_templates`、`system_prompt_template_versions`、`system_prompt_template_variables`，支持系统提示词模板版本化。
+- 新增市场 API：
+  - `GET /api/v1/marketplace-items`
+  - `POST /api/v1/marketplace-items/{item_id}/install`
+  - `POST /api/v1/marketplace-items/{item_id}/rate`
+  - `POST /api/v1/capability-installs/{install_id}/enable|disable`
+  - `POST /api/v1/agent-capability-bindings`
+  - `POST /api/v1/agent-capability-bindings/{binding_id}/enable|disable`
+- 新增系统提示词模板 API：
+  - `POST /api/v1/system-prompt-templates`
+  - `POST /api/v1/system-prompt-templates/preview`
+- Agent 绑定 `system_prompt_template` 时，`agent_capability_bindings.capability_ref_id` 锁定具体 `system_prompt_template_versions.id`，避免公共模板更新导致行为漂移。
+- `llm.Service` 已在构建上下文前解析 Agent 绑定的系统提示词模板版本；如果没有绑定，则继续使用 `user_agent_configs.system_prompt`。
+- 系统提示词模板预览支持 `{variable}` 变量替换、用户自定义 override、required 校验、number/boolean/enum/json 类型校验；创建模板时会自动从内容中提取基础变量定义。
+- 市场条目已支持安装量回算和用户评分，评分会写入 `marketplace_item_reviews` 并回算 `marketplace_items.rating`。
+
+当前仍留给后续阶段：
+
+- MCP Server runtime 已有 `internal/mcp.Runtime` 骨架，可从 MCP definition metadata 与用户启用设置中发现 tool specs；真实 MCP client、进程生命周期和工具同步 worker 后续实现。
+- Skills 的自动匹配和 `skill_disclosure_sections` light 披露已接入 Context Builder；standard/full 渐进式披露、LLM/embedding skill router 和自动 skill 沉淀仍为后续增强。
+- 市场的审核、fork、公共模板安全扫描还未实现。
+- Knowledge Base、Channel Adapter、Tool 的自动上架策略还未统一封装，当前以各自模块创建定义为主。
+- Tool Router 已优先按默认 Agent 的 `agent_capability_bindings` 过滤 tool 候选；如果该 Agent 暂未绑定任何 tool，则回退到用户可见工具，方便开发期逐步接入能力市场。

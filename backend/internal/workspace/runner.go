@@ -68,26 +68,7 @@ type containerRunner struct {
 }
 
 func (r containerRunner) Execute(ctx context.Context, request CommandRequest) (CommandExecution, error) {
-	args := []string{
-		"run",
-		"--rm",
-		"--workdir", containerWorkingDir(request.RelativeWorkDir),
-		"--volume", filepath.Clean(request.Workspace.RootPath) + "/files:/workspace:rw",
-		"--cap-drop", "ALL",
-		"--security-opt", "no-new-privileges",
-		"--pids-limit", "64",
-	}
-	if request.Workspace.NetworkPolicy == "disabled" {
-		args = append(args, "--network", "none")
-	}
-	if request.Workspace.MemoryLimitBytes != nil {
-		args = append(args, "--memory", strconv.FormatInt(*request.Workspace.MemoryLimitBytes, 10))
-	}
-	if request.Workspace.CPULimit != nil && *request.Workspace.CPULimit != "" {
-		args = append(args, "--cpus", *request.Workspace.CPULimit)
-	}
-	args = append(args, r.image, request.Command)
-	args = append(args, request.Args...)
+	args := buildContainerArgs(request, r.image)
 
 	return executeProcess(ctx, exec.CommandContext, processSpec{
 		Binary:         r.binary,
@@ -108,6 +89,46 @@ type nsjailRunner struct {
 }
 
 func (r nsjailRunner) Execute(ctx context.Context, request CommandRequest) (CommandExecution, error) {
+	args := buildNsJailArgs(request)
+
+	return executeProcess(ctx, exec.CommandContext, processSpec{
+		Binary:         r.binary,
+		Args:           args,
+		WorkingDir:     filepath.Clean(request.Workspace.RootPath),
+		TimeoutSeconds: request.TimeoutSeconds,
+		Metadata: map[string]any{
+			"runner":         "nsjail",
+			"sandbox_type":   request.Workspace.SandboxType,
+			"network_policy": request.Workspace.NetworkPolicy,
+		},
+	}, request.Workspace)
+}
+
+func buildContainerArgs(request CommandRequest, image string) []string {
+	args := []string{
+		"run",
+		"--rm",
+		"--workdir", containerWorkingDir(request.RelativeWorkDir),
+		"--volume", filepath.Clean(request.Workspace.RootPath) + "/files:/workspace:rw",
+		"--cap-drop", "ALL",
+		"--security-opt", "no-new-privileges",
+		"--pids-limit", "64",
+	}
+	if request.Workspace.NetworkPolicy == "disabled" {
+		args = append(args, "--network", "none")
+	}
+	if request.Workspace.MemoryLimitBytes != nil {
+		args = append(args, "--memory", strconv.FormatInt(*request.Workspace.MemoryLimitBytes, 10))
+	}
+	if request.Workspace.CPULimit != nil && *request.Workspace.CPULimit != "" {
+		args = append(args, "--cpus", *request.Workspace.CPULimit)
+	}
+	args = append(args, image, request.Command)
+	args = append(args, request.Args...)
+	return args
+}
+
+func buildNsJailArgs(request CommandRequest) []string {
 	args := []string{
 		"--quiet",
 		"--mode", "o",
@@ -124,18 +145,7 @@ func (r nsjailRunner) Execute(ctx context.Context, request CommandRequest) (Comm
 	}
 	args = append(args, "--", request.Command)
 	args = append(args, request.Args...)
-
-	return executeProcess(ctx, exec.CommandContext, processSpec{
-		Binary:         r.binary,
-		Args:           args,
-		WorkingDir:     filepath.Clean(request.Workspace.RootPath),
-		TimeoutSeconds: request.TimeoutSeconds,
-		Metadata: map[string]any{
-			"runner":         "nsjail",
-			"sandbox_type":   request.Workspace.SandboxType,
-			"network_policy": request.Workspace.NetworkPolicy,
-		},
-	}, request.Workspace)
+	return args
 }
 
 type commandFactory func(context.Context, string, ...string) *exec.Cmd

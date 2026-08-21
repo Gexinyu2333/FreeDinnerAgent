@@ -18,12 +18,16 @@ type AgentConfig struct {
 	SystemPrompt          string          `json:"system_prompt"`
 	DefaultProviderID     *string         `json:"default_provider_id"`
 	Temperature           float64         `json:"temperature"`
+	ThinkingEnabled       bool            `json:"thinking_enabled"`
+	ThinkingEffort        string          `json:"thinking_effort"`
+	ThinkingBudgetTokens  int             `json:"thinking_budget_tokens"`
 	MaxContextTokens      int             `json:"max_context_tokens"`
 	MaxLoopSteps          int             `json:"max_loop_steps"`
 	LLMRetryLimit         int             `json:"llm_retry_limit"`
 	FallbackPolicy        json.RawMessage `json:"fallback_policy"`
 	MemoryEnabled         bool            `json:"memory_enabled"`
 	ToolUseEnabled        bool            `json:"tool_use_enabled"`
+	ToolApprovalPolicy    string          `json:"tool_approval_policy"`
 	DreamingEnabled       bool            `json:"dreaming_enabled"`
 	SemanticMemoryEnabled bool            `json:"semantic_memory_enabled"`
 	EmbeddingEnabled      bool            `json:"embedding_enabled"`
@@ -38,12 +42,16 @@ type AgentConfigUpdate struct {
 	SystemPrompt          *string          `json:"system_prompt"`
 	DefaultProviderID     **string         `json:"default_provider_id"`
 	Temperature           *float64         `json:"temperature"`
+	ThinkingEnabled       *bool            `json:"thinking_enabled"`
+	ThinkingEffort        *string          `json:"thinking_effort"`
+	ThinkingBudgetTokens  *int             `json:"thinking_budget_tokens"`
 	MaxContextTokens      *int             `json:"max_context_tokens"`
 	MaxLoopSteps          *int             `json:"max_loop_steps"`
 	LLMRetryLimit         *int             `json:"llm_retry_limit"`
 	FallbackPolicy        *json.RawMessage `json:"fallback_policy"`
 	MemoryEnabled         *bool            `json:"memory_enabled"`
 	ToolUseEnabled        *bool            `json:"tool_use_enabled"`
+	ToolApprovalPolicy    *string          `json:"tool_approval_policy"`
 	DreamingEnabled       *bool            `json:"dreaming_enabled"`
 	SemanticMemoryEnabled *bool            `json:"semantic_memory_enabled"`
 	EmbeddingEnabled      *bool            `json:"embedding_enabled"`
@@ -60,9 +68,10 @@ func NewAgentConfigStore(db *pgxpool.Pool) *AgentConfigStore {
 
 func (s *AgentConfigStore) GetDefault(ctx context.Context, userID string) (AgentConfig, error) {
 	query := `
-		SELECT id, user_id, name, system_prompt, default_provider_id, temperature, max_context_tokens,
+		SELECT id, user_id, name, system_prompt, default_provider_id, temperature, thinking_enabled,
+		       thinking_effort, thinking_budget_tokens, max_context_tokens,
 		       max_loop_steps, llm_retry_limit, fallback_policy, memory_enabled, tool_use_enabled,
-		       dreaming_enabled, semantic_memory_enabled, embedding_enabled, embedding_cost_policy,
+		       tool_approval_policy, dreaming_enabled, semantic_memory_enabled, embedding_enabled, embedding_cost_policy,
 		       metadata, created_at, updated_at
 		FROM user_agent_configs
 		WHERE user_id = $1
@@ -106,6 +115,18 @@ func (s *AgentConfigStore) UpdateDefault(ctx context.Context, userID string, upd
 	if update.Temperature != nil {
 		temperature = *update.Temperature
 	}
+	thinkingEnabled := cfg.ThinkingEnabled
+	if update.ThinkingEnabled != nil {
+		thinkingEnabled = *update.ThinkingEnabled
+	}
+	thinkingEffort := cfg.ThinkingEffort
+	if update.ThinkingEffort != nil {
+		thinkingEffort = normalizeThinkingEffort(*update.ThinkingEffort)
+	}
+	thinkingBudgetTokens := cfg.ThinkingBudgetTokens
+	if update.ThinkingBudgetTokens != nil {
+		thinkingBudgetTokens = *update.ThinkingBudgetTokens
+	}
 	maxContextTokens := cfg.MaxContextTokens
 	if update.MaxContextTokens != nil {
 		maxContextTokens = *update.MaxContextTokens
@@ -130,6 +151,10 @@ func (s *AgentConfigStore) UpdateDefault(ctx context.Context, userID string, upd
 	if update.ToolUseEnabled != nil {
 		toolUseEnabled = *update.ToolUseEnabled
 	}
+	toolApprovalPolicy := cfg.ToolApprovalPolicy
+	if update.ToolApprovalPolicy != nil {
+		toolApprovalPolicy = normalizeToolApprovalPolicy(*update.ToolApprovalPolicy)
+	}
 	dreamingEnabled := cfg.DreamingEnabled
 	if update.DreamingEnabled != nil {
 		dreamingEnabled = *update.DreamingEnabled
@@ -153,26 +178,31 @@ func (s *AgentConfigStore) UpdateDefault(ctx context.Context, userID string, upd
 		    system_prompt = $4,
 		    default_provider_id = $5,
 		    temperature = $6,
-		    max_context_tokens = $7,
-		    max_loop_steps = $8,
-		    llm_retry_limit = $9,
-		    fallback_policy = $10,
-		    memory_enabled = $11,
-		    tool_use_enabled = $12,
-		    dreaming_enabled = $13,
-		    semantic_memory_enabled = $14,
-		    embedding_enabled = $15,
-		    embedding_cost_policy = $16,
+		    thinking_enabled = $7,
+		    thinking_effort = $8,
+		    thinking_budget_tokens = $9,
+		    max_context_tokens = $10,
+		    max_loop_steps = $11,
+		    llm_retry_limit = $12,
+		    fallback_policy = $13,
+		    memory_enabled = $14,
+		    tool_use_enabled = $15,
+		    tool_approval_policy = $16,
+		    dreaming_enabled = $17,
+		    semantic_memory_enabled = $18,
+		    embedding_enabled = $19,
+		    embedding_cost_policy = $20,
 		    updated_at = NOW()
 		WHERE id = $1 AND user_id = $2
-		RETURNING id, user_id, name, system_prompt, default_provider_id, temperature, max_context_tokens,
+		RETURNING id, user_id, name, system_prompt, default_provider_id, temperature, thinking_enabled,
+		          thinking_effort, thinking_budget_tokens, max_context_tokens,
 		          max_loop_steps, llm_retry_limit, fallback_policy, memory_enabled, tool_use_enabled,
-		          dreaming_enabled, semantic_memory_enabled, embedding_enabled, embedding_cost_policy,
+		          tool_approval_policy, dreaming_enabled, semantic_memory_enabled, embedding_enabled, embedding_cost_policy,
 		          metadata, created_at, updated_at
 	`
 	return scanAgentConfig(s.db.QueryRow(ctx, query, cfg.ID, userID, name, systemPrompt, defaultProviderID, temperature,
-		maxContextTokens, maxLoopSteps, llmRetryLimit, fallbackPolicy, memoryEnabled, toolUseEnabled,
-		dreamingEnabled, semanticMemoryEnabled, embeddingEnabled, embeddingCostPolicy))
+		thinkingEnabled, thinkingEffort, thinkingBudgetTokens, maxContextTokens, maxLoopSteps, llmRetryLimit, fallbackPolicy, memoryEnabled, toolUseEnabled,
+		toolApprovalPolicy, dreamingEnabled, semanticMemoryEnabled, embeddingEnabled, embeddingCostPolicy))
 }
 
 func scanAgentConfig(row pgx.Row) (AgentConfig, error) {
@@ -184,12 +214,16 @@ func scanAgentConfig(row pgx.Row) (AgentConfig, error) {
 		&cfg.SystemPrompt,
 		&cfg.DefaultProviderID,
 		&cfg.Temperature,
+		&cfg.ThinkingEnabled,
+		&cfg.ThinkingEffort,
+		&cfg.ThinkingBudgetTokens,
 		&cfg.MaxContextTokens,
 		&cfg.MaxLoopSteps,
 		&cfg.LLMRetryLimit,
 		&cfg.FallbackPolicy,
 		&cfg.MemoryEnabled,
 		&cfg.ToolUseEnabled,
+		&cfg.ToolApprovalPolicy,
 		&cfg.DreamingEnabled,
 		&cfg.SemanticMemoryEnabled,
 		&cfg.EmbeddingEnabled,
@@ -204,4 +238,22 @@ func scanAgentConfig(row pgx.Row) (AgentConfig, error) {
 		return AgentConfig{}, err
 	}
 	return cfg, nil
+}
+
+func normalizeToolApprovalPolicy(value string) string {
+	switch value {
+	case "never", "always":
+		return value
+	default:
+		return "sensitive_only"
+	}
+}
+
+func normalizeThinkingEffort(value string) string {
+	switch value {
+	case "low", "high":
+		return value
+	default:
+		return "medium"
+	}
 }

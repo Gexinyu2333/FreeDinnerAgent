@@ -1,10 +1,13 @@
 package channel
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +21,14 @@ var ErrInvalidWebhookSecret = errors.New("invalid webhook secret")
 type Service struct {
 	channels      *store.ChannelStore
 	conversations *store.ConversationStore
+	responder     AgentResponder
 	crypto        secret.Crypto
+	adapters      map[string]ChannelAdapter
+	httpClient    *http.Client
+}
+
+type AgentResponder interface {
+	RespondToExistingMessage(ctx context.Context, userID, conversationID string, message store.Message) (store.SendMessageResult, error)
 }
 
 type CreateConnectionInput struct {
@@ -85,8 +95,17 @@ type normalizedEvent struct {
 	RawPayload               json.RawMessage
 }
 
-func NewService(channels *store.ChannelStore, conversations *store.ConversationStore, crypto secret.Crypto) *Service {
-	return &Service{channels: channels, conversations: conversations, crypto: crypto}
+func NewService(channels *store.ChannelStore, conversations *store.ConversationStore, crypto secret.Crypto, responder AgentResponder) *Service {
+	return &Service{
+		channels:      channels,
+		conversations: conversations,
+		responder:     responder,
+		crypto:        crypto,
+		adapters: map[string]ChannelAdapter{
+			"qq": OneBotAdapter{},
+		},
+		httpClient: &http.Client{Timeout: 15 * time.Second},
+	}
 }
 
 func (s *Service) EnsureBuiltins(ctx context.Context) error {
@@ -168,16 +187,29 @@ func (s *Service) HandleWebhook(ctx context.Context, connectionID, providedSecre
 	if err != nil {
 		return WebhookResult{}, err
 	}
-	if cfg.WebhookSecret != "" && providedSecret != cfg.WebhookSecret {
-		return WebhookResult{}, ErrInvalidWebhookSecret
+	adapter := s.adapterForConnection(ctx, connection)
+	if err := adapter.VerifyInbound(ctx, InboundRequest{
+		Connection:     connection,
+		ProvidedSecret: providedSecret,
+		RawPayload:     rawPayload,
+	}, cfg); err != nil {
+		return WebhookResult{}, err
 	}
 
-	event, err := normalizeOneBot(rawPayload, connection.ExternalAccountID)
+	event, err := adapter.NormalizeEvent(ctx, rawPayload, connection.ExternalAccountID)
 	if err != nil {
 		return WebhookResult{}, err
 	}
 	policy := s.resolvePolicy(ctx, connection, event)
-	shouldTrigger, reason := shouldTrigger(event, policy, connection.ExternalAccountID)
+	now := time.Now()
+	shouldTrigger, reason := shouldTriggerAt(event, policy, connection.ExternalAccountID, now)
+	if shouldTrigger && policy.RateLimitPerMinute > 0 {
+		count, err := s.channels.CountRecentTriggeredInboxEvents(ctx, connection.UserID, connection.ID, event.ScopeType, event.ExternalScopeID, now.Add(-time.Minute))
+		if err == nil && count >= policy.RateLimitPerMinute {
+			shouldTrigger = false
+			reason = "rate_limited"
+		}
+	}
 	status := "ignored"
 	if shouldTrigger {
 		status = "processed"
@@ -233,21 +265,40 @@ func (s *Service) HandleWebhook(ctx context.Context, connectionID, providedSecre
 	}
 
 	if shouldTrigger && conversation != nil && externalConversation != nil {
-		content := fmt.Sprintf("已收到 QQ 消息：%s\n\n当前 Step 10 MVP 已完成渠道入站、会话映射和 outbox 草稿；后续会把这里接入完整 Agent Loop 生成真实回复。", event.Text)
-		metadata, _ := json.Marshal(map[string]any{"source": "channel_adapter", "inbox_event_id": inbox.ID})
-		assistantMessage, err := s.conversations.CreateAssistantMessage(ctx, connection.UserID, conversation.ID, content, metadata)
-		if err != nil {
-			return WebhookResult{}, err
+		content := fmt.Sprintf("已收到 QQ 消息：%s\n\n当前 Agent 暂时无法生成回复，请稍后重试。", event.Text)
+		var agentTurnID *string
+		if s.responder != nil && message != nil {
+			result, err := s.responder.RespondToExistingMessage(ctx, connection.UserID, conversation.ID, *message)
+			if err == nil && strings.TrimSpace(result.AssistantMessage.Content) != "" {
+				content = result.AssistantMessage.Content
+				agentTurnID = &result.TurnID
+				message = &result.AssistantMessage
+			} else {
+				metadata, _ := json.Marshal(map[string]any{"source": "channel_adapter_fallback", "inbox_event_id": inbox.ID})
+				assistantMessage, createErr := s.conversations.CreateAssistantMessage(ctx, connection.UserID, conversation.ID, content, metadata)
+				if createErr != nil {
+					return WebhookResult{}, createErr
+				}
+				message = &assistantMessage
+			}
+		} else {
+			metadata, _ := json.Marshal(map[string]any{"source": "channel_adapter_fallback", "inbox_event_id": inbox.ID})
+			assistantMessage, err := s.conversations.CreateAssistantMessage(ctx, connection.UserID, conversation.ID, content, metadata)
+			if err != nil {
+				return WebhookResult{}, err
+			}
+			message = &assistantMessage
 		}
-		message = &assistantMessage
 		outboxMessage, err := s.channels.CreateOutboxMessage(ctx, store.ChannelOutboxMessage{
 			UserID:                 connection.UserID,
 			ChannelConnectionID:    connection.ID,
 			ExternalConversationID: &externalConversation.ID,
 			ConversationID:         &conversation.ID,
+			AgentTurnID:            agentTurnID,
 			ReplyToInboxEventID:    &inbox.ID,
 			MessageType:            "text",
 			Content:                content,
+			Payload:                buildOutboxPayload(adapter, connection, *externalConversation, content),
 			RequiresApproval:       policy.RequireApprovalForOutbound,
 			Status:                 outboxStatus(policy.RequireApprovalForOutbound),
 		})
@@ -264,6 +315,20 @@ func (s *Service) HandleWebhook(ctx context.Context, connectionID, providedSecre
 		Message:              message,
 		OutboxMessage:        outbox,
 	}, nil
+}
+
+func (s *Service) adapterForConnection(ctx context.Context, connection store.ChannelConnection) ChannelAdapter {
+	providers, err := s.channels.ListProviders(ctx)
+	if err == nil {
+		for _, provider := range providers {
+			if provider.ID == connection.ProviderID {
+				if adapter, ok := s.adapters[provider.ProviderType]; ok {
+					return adapter
+				}
+			}
+		}
+	}
+	return OneBotAdapter{}
 }
 
 func (s *Service) ListExternalConversations(ctx context.Context, userID, connectionID string, limit int) ([]store.ExternalConversation, error) {
@@ -285,6 +350,59 @@ func (s *Service) ListOutboxMessages(ctx context.Context, userID, connectionID s
 		return nil, err
 	}
 	return s.channels.ListOutboxMessages(ctx, userID, connectionID, status, limit)
+}
+
+func (s *Service) ApproveOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error) {
+	return s.channels.ResolveOutboxMessage(ctx, userID, outboxID, "approved")
+}
+
+func (s *Service) CancelOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error) {
+	return s.channels.ResolveOutboxMessage(ctx, userID, outboxID, "cancelled")
+}
+
+func (s *Service) SendOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error) {
+	message, err := s.channels.MarkOutboxSending(ctx, userID, outboxID)
+	if err != nil {
+		return store.ChannelOutboxMessage{}, err
+	}
+	connection, err := s.channels.FindUserConnectionByID(ctx, userID, message.ChannelConnectionID)
+	if err != nil {
+		return store.ChannelOutboxMessage{}, err
+	}
+	cfg, err := s.decryptConfig(connection.EncryptedConfig)
+	if err != nil {
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	if strings.TrimSpace(cfg.Endpoint) == "" {
+		err := errors.New("missing channel endpoint")
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	endpoint := strings.TrimRight(cfg.Endpoint, "/") + "/send_msg"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(message.Payload))
+	if err != nil {
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(cfg.AccessToken) != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.AccessToken)
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("channel send status %d: %s", resp.StatusCode, string(body))
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	externalID := extractExternalMessageID(body)
+	return s.channels.MarkOutboxSent(ctx, userID, outboxID, externalID)
 }
 
 func (s *Service) ensureConversationAndMessage(ctx context.Context, connection store.ChannelConnection, event normalizedEvent) (store.ExternalConversation, store.Conversation, store.Message, error) {
@@ -396,6 +514,13 @@ func normalizeOneBot(rawPayload []byte, botQQ *string) (normalizedEvent, error) 
 }
 
 func shouldTrigger(event normalizedEvent, policy store.ChannelPolicy, botQQ *string) (bool, string) {
+	return shouldTriggerAt(event, policy, botQQ, time.Now())
+}
+
+func shouldTriggerAt(event normalizedEvent, policy store.ChannelPolicy, botQQ *string, now time.Time) (bool, string) {
+	if inQuietHours(policy.QuietHours, now) {
+		return false, "quiet_hours"
+	}
 	switch policy.Mode {
 	case "disabled", "silent_listen":
 		return false, policy.Mode
@@ -417,6 +542,91 @@ func shouldTrigger(event normalizedEvent, policy store.ChannelPolicy, botQQ *str
 		}
 		return true, "private_chat"
 	}
+}
+
+func buildOutboxPayload(adapter ChannelAdapter, connection store.ChannelConnection, external store.ExternalConversation, content string) json.RawMessage {
+	payload, err := adapter.BuildSendPayload(context.Background(), OutboxMessage{
+		Connection:           connection,
+		ExternalConversation: external,
+		Message: store.ChannelOutboxMessage{
+			Content: content,
+		},
+	})
+	if err != nil || len(payload) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return payload
+}
+
+func buildOneBotSendPayload(external store.ExternalConversation, content string) (json.RawMessage, error) {
+	payload := map[string]any{
+		"message": content,
+	}
+	switch external.ExternalConversationType {
+	case "group_chat":
+		payload["message_type"] = "group"
+		payload["group_id"] = external.ExternalConversationID
+	default:
+		payload["message_type"] = "private"
+		payload["user_id"] = external.ExternalConversationID
+	}
+	return json.Marshal(payload)
+}
+
+type quietHoursConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Timezone string `json:"timezone"`
+	Start    string `json:"start"`
+	End      string `json:"end"`
+}
+
+func inQuietHours(raw json.RawMessage, now time.Time) bool {
+	if len(raw) == 0 || string(raw) == "{}" || string(raw) == "null" {
+		return false
+	}
+	var cfg quietHoursConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil || !cfg.Enabled {
+		return false
+	}
+	location := time.Local
+	if strings.TrimSpace(cfg.Timezone) != "" {
+		if loaded, err := time.LoadLocation(strings.TrimSpace(cfg.Timezone)); err == nil {
+			location = loaded
+		}
+	}
+	localNow := now.In(location)
+	startMinute, ok := parseClockMinute(cfg.Start)
+	if !ok {
+		return false
+	}
+	endMinute, ok := parseClockMinute(cfg.End)
+	if !ok {
+		return false
+	}
+	currentMinute := localNow.Hour()*60 + localNow.Minute()
+	if startMinute == endMinute {
+		return true
+	}
+	if startMinute < endMinute {
+		return currentMinute >= startMinute && currentMinute < endMinute
+	}
+	return currentMinute >= startMinute || currentMinute < endMinute
+}
+
+func parseClockMinute(value string) (int, bool) {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) < 2 {
+		return 0, false
+	}
+	hour, err := strconv.Atoi(parts[0])
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, false
+	}
+	minute, err := strconv.Atoi(parts[1])
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, false
+	}
+	return hour*60 + minute, true
 }
 
 func (s *Service) encryptConfig(raw json.RawMessage) (json.RawMessage, error) {
@@ -527,4 +737,24 @@ func stripBotMention(text string, botQQ *string) string {
 		return strings.TrimSpace(text)
 	}
 	return strings.TrimSpace(strings.ReplaceAll(text, "[CQ:at,qq="+*botQQ+"]", ""))
+}
+
+func extractExternalMessageID(body []byte) *string {
+	var decoded struct {
+		Data struct {
+			MessageID any `json:"message_id"`
+		} `json:"data"`
+		MessageID any `json:"message_id"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return nil
+	}
+	value := valueToString(decoded.MessageID)
+	if value == "" {
+		value = valueToString(decoded.Data.MessageID)
+	}
+	if value == "" {
+		return nil
+	}
+	return &value
 }

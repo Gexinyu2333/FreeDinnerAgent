@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	memorysvc "freedinner/backend/internal/memory"
 	"freedinner/backend/internal/store"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +13,11 @@ import (
 
 type MemoryHandler struct {
 	memories *store.MemoryStore
+	manager  *memorysvc.Manager
 }
 
-func NewMemoryHandler(memories *store.MemoryStore) *MemoryHandler {
-	return &MemoryHandler{memories: memories}
+func NewMemoryHandler(memories *store.MemoryStore, manager *memorysvc.Manager) *MemoryHandler {
+	return &MemoryHandler{memories: memories, manager: manager}
 }
 
 type createProfileMemoryRequest struct {
@@ -128,6 +130,45 @@ func (h *MemoryHandler) SearchProfileMemories(c *gin.Context) {
 	})
 }
 
+func (h *MemoryHandler) Context(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	if h.manager == nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "memory manager is not configured")
+		return
+	}
+
+	conversationID := strings.TrimSpace(c.Query("conversation_id"))
+	if conversationID == "" {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "conversation_id is required")
+		return
+	}
+	query := strings.TrimSpace(c.Query("q"))
+	if query == "" {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "q is required")
+		return
+	}
+
+	result, err := h.manager.Retrieve(c.Request.Context(), memorysvc.RetrieveInput{
+		UserID:          userID,
+		ConversationID:  conversationID,
+		Query:           query,
+		MaxMemoryTokens: parseMemoryLimit(c.Query("max_memory_tokens")),
+		IncludeWorking:  parseBoolDefault(c.Query("working"), true),
+		IncludeProfile:  parseBoolDefault(c.Query("profile"), true),
+		IncludeSemantic: parseBoolDefault(c.Query("semantic"), false),
+		LogRetrieval:    parseBoolDefault(c.Query("log"), false),
+	})
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to retrieve memory context")
+		return
+	}
+	OK(c, result)
+}
+
 func validateCreateProfileMemory(req createProfileMemoryRequest) error {
 	if strings.TrimSpace(req.MemoryType) == "" {
 		return errMessage("memory_type is required")
@@ -145,6 +186,28 @@ func validateCreateProfileMemory(req createProfileMemoryRequest) error {
 		return errMessage("importance must be between 1 and 5")
 	}
 	return nil
+}
+
+func parseMemoryLimit(value string) int {
+	if strings.TrimSpace(value) == "" {
+		return 1200
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 || parsed > 20000 {
+		return 1200
+	}
+	return parsed
+}
+
+func parseBoolDefault(value string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func normalizeMemoryScope(value string) string {

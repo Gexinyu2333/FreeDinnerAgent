@@ -46,6 +46,31 @@ type EnableInput struct {
 	DestroyAfterSeconds int
 }
 
+type UpdatePolicyInput struct {
+	UserID              string
+	SandboxType         *string
+	NetworkPolicy       *string
+	NetworkAllowlist    []string
+	NetworkAllowlistSet bool
+	MaxDiskBytes        *int64
+	MaxFileCount        *int
+	MaxSingleFileBytes  *int64
+	MaxCommandSeconds   *int
+	MaxStdoutBytes      *int
+	MaxStderrBytes      *int
+	CPULimit            *string
+	CPULimitSet         bool
+	MemoryLimitBytes    *int64
+	MemoryLimitSet      bool
+	IdleAfterSeconds    *int
+	DestroyAfterSeconds *int
+}
+
+type DestroyResult struct {
+	Workspace    store.UserWorkspace `json:"workspace"`
+	FilesRemoved bool                `json:"files_removed"`
+}
+
 type WorkspaceStatus struct {
 	Workspace store.UserWorkspace          `json:"workspace"`
 	Quota     store.WorkspaceQuotaSnapshot `json:"quota"`
@@ -206,6 +231,55 @@ func (s *Service) ListCommandRuns(ctx context.Context, userID string, limit int)
 		return nil, err
 	}
 	return s.workspaces.ListCommandRuns(ctx, userID, workspace.ID, limit)
+}
+
+func (s *Service) UpdatePolicy(ctx context.Context, input UpdatePolicyInput) (WorkspaceStatus, error) {
+	workspace, err := s.activeWorkspace(ctx, input.UserID)
+	if err != nil {
+		return WorkspaceStatus{}, err
+	}
+	updatedInput := policyUpdateFromWorkspace(input, workspace)
+	updated, err := s.workspaces.UpdatePolicy(ctx, updatedInput)
+	if err != nil {
+		return WorkspaceStatus{}, err
+	}
+	_, _ = s.workspaces.CreateEvent(ctx, store.WorkspaceEvent{
+		UserID:      input.UserID,
+		WorkspaceID: updated.ID,
+		EventType:   "policy_changed",
+		ActorType:   "user",
+		Metadata:    mustJSON(map[string]any{"sandbox_type": updated.SandboxType, "network_policy": updated.NetworkPolicy}),
+	})
+	return s.GetStatus(ctx, input.UserID)
+}
+
+func (s *Service) Destroy(ctx context.Context, userID string, removeFiles bool) (DestroyResult, error) {
+	workspace, err := s.activeWorkspace(ctx, userID)
+	if err != nil {
+		return DestroyResult{}, err
+	}
+	if removeFiles && !isWithinRoot(s.root, workspace.RootPath) {
+		return DestroyResult{}, ErrPathOutsideRoot
+	}
+	destroyed, err := s.workspaces.MarkDestroyed(ctx, userID, workspace.ID)
+	if err != nil {
+		return DestroyResult{}, err
+	}
+	filesRemoved := false
+	if removeFiles {
+		if err := os.RemoveAll(workspace.RootPath); err != nil {
+			return DestroyResult{}, err
+		}
+		filesRemoved = true
+	}
+	_, _ = s.workspaces.CreateEvent(ctx, store.WorkspaceEvent{
+		UserID:      userID,
+		WorkspaceID: workspace.ID,
+		EventType:   "destroyed",
+		ActorType:   "user",
+		Metadata:    mustJSON(map[string]any{"files_removed": filesRemoved}),
+	})
+	return DestroyResult{Workspace: destroyed, FilesRemoved: filesRemoved}, nil
 }
 
 func (s *Service) recordBlockedCommand(ctx context.Context, workspace store.UserWorkspace, input RunCommandInput, command string, args []string, message string) (RunCommandResult, error) {
@@ -644,6 +718,77 @@ func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
 		result[key] = value
 	}
 	return result
+}
+
+func policyUpdateFromWorkspace(input UpdatePolicyInput, workspace store.UserWorkspace) store.WorkspacePolicyUpdate {
+	update := store.WorkspacePolicyUpdate{
+		UserID:              input.UserID,
+		WorkspaceID:         workspace.ID,
+		SandboxType:         workspace.SandboxType,
+		NetworkPolicy:       workspace.NetworkPolicy,
+		NetworkAllowlist:    workspace.NetworkAllowlist,
+		MaxDiskBytes:        workspace.MaxDiskBytes,
+		MaxFileCount:        workspace.MaxFileCount,
+		MaxSingleFileBytes:  workspace.MaxSingleFileBytes,
+		MaxCommandSeconds:   workspace.MaxCommandSeconds,
+		MaxStdoutBytes:      workspace.MaxStdoutBytes,
+		MaxStderrBytes:      workspace.MaxStderrBytes,
+		CPULimit:            workspace.CPULimit,
+		MemoryLimitBytes:    workspace.MemoryLimitBytes,
+		IdleAfterSeconds:    workspace.IdleAfterSeconds,
+		DestroyAfterSeconds: workspace.DestroyAfterSeconds,
+	}
+	if input.SandboxType != nil && strings.TrimSpace(*input.SandboxType) != "" {
+		update.SandboxType = strings.TrimSpace(*input.SandboxType)
+	}
+	if input.NetworkPolicy != nil && strings.TrimSpace(*input.NetworkPolicy) != "" {
+		update.NetworkPolicy = strings.TrimSpace(*input.NetworkPolicy)
+	}
+	if input.NetworkAllowlistSet {
+		update.NetworkAllowlist = input.NetworkAllowlist
+	}
+	if input.MaxDiskBytes != nil && *input.MaxDiskBytes > 0 {
+		update.MaxDiskBytes = *input.MaxDiskBytes
+	}
+	if input.MaxFileCount != nil && *input.MaxFileCount > 0 {
+		update.MaxFileCount = *input.MaxFileCount
+	}
+	if input.MaxSingleFileBytes != nil && *input.MaxSingleFileBytes > 0 {
+		update.MaxSingleFileBytes = *input.MaxSingleFileBytes
+	}
+	if input.MaxCommandSeconds != nil && *input.MaxCommandSeconds > 0 {
+		update.MaxCommandSeconds = *input.MaxCommandSeconds
+	}
+	if input.MaxStdoutBytes != nil && *input.MaxStdoutBytes > 0 {
+		update.MaxStdoutBytes = *input.MaxStdoutBytes
+	}
+	if input.MaxStderrBytes != nil && *input.MaxStderrBytes > 0 {
+		update.MaxStderrBytes = *input.MaxStderrBytes
+	}
+	if input.CPULimitSet {
+		update.CPULimit = trimStringPointer(input.CPULimit)
+	}
+	if input.MemoryLimitSet {
+		update.MemoryLimitBytes = input.MemoryLimitBytes
+	}
+	if input.IdleAfterSeconds != nil && *input.IdleAfterSeconds > 0 {
+		update.IdleAfterSeconds = *input.IdleAfterSeconds
+	}
+	if input.DestroyAfterSeconds != nil && *input.DestroyAfterSeconds > 0 {
+		update.DestroyAfterSeconds = *input.DestroyAfterSeconds
+	}
+	return update
+}
+
+func trimStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func normalizeEnableInput(input EnableInput) EnableInput {

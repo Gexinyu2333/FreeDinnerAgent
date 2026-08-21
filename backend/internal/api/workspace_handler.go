@@ -36,6 +36,22 @@ type enableWorkspaceRequest struct {
 	DestroyAfterSeconds int      `json:"destroy_after_seconds"`
 }
 
+type updateWorkspacePolicyRequest struct {
+	SandboxType         *string  `json:"sandbox_type"`
+	MaxDiskBytes        *int64   `json:"max_disk_bytes"`
+	MaxFileCount        *int     `json:"max_file_count"`
+	MaxSingleFileBytes  *int64   `json:"max_single_file_bytes"`
+	MaxCommandSeconds   *int     `json:"max_command_seconds"`
+	MaxStdoutBytes      *int     `json:"max_stdout_bytes"`
+	MaxStderrBytes      *int     `json:"max_stderr_bytes"`
+	CPULimit            *string  `json:"cpu_limit"`
+	MemoryLimitBytes    *int64   `json:"memory_limit_bytes"`
+	NetworkPolicy       *string  `json:"network_policy"`
+	NetworkAllowlist    []string `json:"network_allowlist"`
+	IdleAfterSeconds    *int     `json:"idle_after_seconds"`
+	DestroyAfterSeconds *int     `json:"destroy_after_seconds"`
+}
+
 type writeWorkspaceFileRequest struct {
 	Path    string `json:"path" binding:"required"`
 	Content string `json:"content"`
@@ -100,6 +116,51 @@ func (h *WorkspaceHandler) Enable(c *gin.Context) {
 		return
 	}
 	OK(c, status)
+}
+
+func (h *WorkspaceHandler) UpdatePolicy(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+
+	var req updateWorkspacePolicyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	_, allowlistSet := c.GetPostForm("network_allowlist")
+	status, err := h.workspaces.UpdatePolicy(c.Request.Context(), workspacesvc.UpdatePolicyInput{
+		UserID:              userID,
+		SandboxType:         req.SandboxType,
+		NetworkPolicy:       req.NetworkPolicy,
+		NetworkAllowlist:    req.NetworkAllowlist,
+		NetworkAllowlistSet: allowlistSet || req.NetworkAllowlist != nil,
+		MaxDiskBytes:        req.MaxDiskBytes,
+		MaxFileCount:        req.MaxFileCount,
+		MaxSingleFileBytes:  req.MaxSingleFileBytes,
+		MaxCommandSeconds:   req.MaxCommandSeconds,
+		MaxStdoutBytes:      req.MaxStdoutBytes,
+		MaxStderrBytes:      req.MaxStderrBytes,
+		CPULimit:            req.CPULimit,
+		CPULimitSet:         req.CPULimit != nil,
+		MemoryLimitBytes:    req.MemoryLimitBytes,
+		MemoryLimitSet:      req.MemoryLimitBytes != nil,
+		IdleAfterSeconds:    req.IdleAfterSeconds,
+		DestroyAfterSeconds: req.DestroyAfterSeconds,
+	})
+	writeWorkspaceResult(c, status, err)
+}
+
+func (h *WorkspaceHandler) Destroy(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	result, err := h.workspaces.Destroy(c.Request.Context(), userID, parseBoolQuery(c, "remove_files", false))
+	writeWorkspaceResult(c, result, err)
 }
 
 func (h *WorkspaceHandler) ListFiles(c *gin.Context) {
@@ -207,6 +268,18 @@ func parseIntQuery(c *gin.Context, key string, fallback int) int {
 		return fallback
 	}
 	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func parseBoolQuery(c *gin.Context, key string, fallback bool) bool {
+	raw := c.Query(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(raw)
 	if err != nil {
 		return fallback
 	}

@@ -136,6 +136,22 @@ curl -sS "http://localhost:8080/api/v1/profile-memory-search?q=回答风格&limi
   -H "Authorization: Bearer $TOKEN"
 ```
 
+预览本轮会加载的记忆上下文：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/memory-context?conversation_id=<conversation_id>&q=根据知识库和我的偏好回答&max_memory_tokens=1200" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+手动压缩当前对话：
+
+```bash
+curl -sS -X POST "http://localhost:8080/api/v1/conversations/<conversation_id>/compress" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"keep_recent_turns":8,"target_summary_type":"turn_window"}'
+```
+
 查看工具列表：
 
 ```bash
@@ -180,6 +196,31 @@ curl -sS -X POST "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/run-
 
 ```bash
 curl -sS "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/runs" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+查看推荐心跳任务模板：
+
+```bash
+curl -sS http://localhost:8080/api/v1/scheduled-agent-job-templates \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+更新/暂停/恢复/删除心跳任务：
+
+```bash
+curl -sS -X PATCH "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"run_at_local_time":"09:00","weekdays":[1,2,3,4,5]}'
+
+curl -sS -X POST "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/pause" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -sS -X POST "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID/resume" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -sS -X DELETE "http://localhost:8080/api/v1/scheduled-agent-jobs/$JOB_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -236,6 +277,44 @@ curl -sS "http://localhost:8080/api/v1/me/channel-connections/$CONNECTION_ID/out
   -H "Authorization: Bearer $TOKEN"
 ```
 
+审批或取消群聊 outbox 草稿：
+
+```bash
+OUTBOX_ID="<outbox message id>"
+curl -sS -X POST "http://localhost:8080/api/v1/channel-outbox-messages/$OUTBOX_ID/approve" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -sS -X POST "http://localhost:8080/api/v1/channel-outbox-messages/$OUTBOX_ID/cancel" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+查看能力市场并创建系统提示词模板：
+
+```bash
+curl -sS "http://localhost:8080/api/v1/marketplace-items?item_type=system_prompt_template" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -sS -X POST http://localhost:8080/api/v1/system-prompt-templates \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"research_assistant","display_name":"研究助理","description":"适合论文阅读和课题整理。","category":"research","tags":["research"],"visibility":"private","content":"你是 {agent_name}，请用 {language} 回答，并优先保持严谨。","variables":[{"name":"agent_name","display_name":"Agent 名称","value_type":"string","required":true,"default_value":"小饭"},{"name":"language","display_name":"回答语言","value_type":"enum","required":true,"default_value":"中文","allowed_values":["中文","English"]}]}'
+```
+
+预览并绑定系统提示词模板版本：
+
+```bash
+TEMPLATE_VERSION_ID="<创建模板返回的 version.id>"
+curl -sS -X POST http://localhost:8080/api/v1/system-prompt-templates/preview \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"version_id":"'"$TEMPLATE_VERSION_ID"'","variables":{"agent_name":"小饭","language":"中文"},"override":"回答时先给结论。"}'
+
+curl -sS -X POST http://localhost:8080/api/v1/agent-capability-bindings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"capability_type":"system_prompt_template","capability_ref_id":"'"$TEMPLATE_VERSION_ID"'","load_mode":"full","priority":100}'
+```
+
 启用 Workspace：
 
 ```bash
@@ -288,6 +367,22 @@ curl -sS -X POST http://localhost:8080/api/v1/me/workspace/commands \
 
 ```bash
 curl -sS "http://localhost:8080/api/v1/me/workspace/commands?limit=20" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+更新 Workspace 策略：
+
+```bash
+curl -sS -X PATCH http://localhost:8080/api/v1/me/workspace \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sandbox_type":"local_dir","network_policy":"disabled","max_command_seconds":10}'
+```
+
+销毁 Workspace 记录：
+
+```bash
+curl -sS -X DELETE "http://localhost:8080/api/v1/me/workspace?remove_files=false" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

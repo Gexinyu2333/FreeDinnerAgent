@@ -52,12 +52,16 @@ CREATE TABLE IF NOT EXISTS user_agent_configs (
     system_prompt TEXT NOT NULL DEFAULT '你是一个具备长期记忆能力的个人 AI 助理。',
     default_provider_id UUID REFERENCES user_model_providers(id) ON DELETE SET NULL,
     temperature NUMERIC(3, 2) NOT NULL DEFAULT 0.70 CHECK (temperature >= 0 AND temperature <= 2),
+    thinking_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    thinking_effort VARCHAR(20) NOT NULL DEFAULT 'medium' CHECK (thinking_effort IN ('low', 'medium', 'high')),
+    thinking_budget_tokens INTEGER NOT NULL DEFAULT 0 CHECK (thinking_budget_tokens >= 0),
     max_context_tokens INTEGER NOT NULL DEFAULT 12000 CHECK (max_context_tokens > 0),
     max_loop_steps INTEGER NOT NULL DEFAULT 6 CHECK (max_loop_steps > 0),
     llm_retry_limit INTEGER NOT NULL DEFAULT 2 CHECK (llm_retry_limit >= 0),
     fallback_policy JSONB NOT NULL DEFAULT '{"repair_output": true, "reduce_context": true, "ask_clarification": true, "safe_final_answer": true}'::jsonb,
     memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     tool_use_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    tool_approval_policy VARCHAR(40) NOT NULL DEFAULT 'sensitive_only' CHECK (tool_approval_policy IN ('never', 'sensitive_only', 'always')),
     dreaming_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     semantic_memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     embedding_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -627,9 +631,55 @@ CREATE TABLE IF NOT EXISTS channel_outbox_messages (
     sent_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS system_prompt_templates (
+    id UUID PRIMARY KEY,
+    owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    name VARCHAR(120) NOT NULL,
+    display_name VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(80) NOT NULL DEFAULT 'general',
+    tags TEXT[] NOT NULL DEFAULT '{}',
+    visibility VARCHAR(32) NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
+    status VARCHAR(32) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived', 'deleted')),
+    latest_version INTEGER NOT NULL DEFAULT 1,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (owner_user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS system_prompt_template_versions (
+    id UUID PRIMARY KEY,
+    template_id UUID NOT NULL REFERENCES system_prompt_templates(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    change_note TEXT,
+    recommended_model_family VARCHAR(80),
+    recommended_capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
+    safety_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+    token_estimate INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(32) NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published', 'archived')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (template_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS system_prompt_template_variables (
+    id UUID PRIMARY KEY,
+    template_version_id UUID NOT NULL REFERENCES system_prompt_template_versions(id) ON DELETE CASCADE,
+    name VARCHAR(80) NOT NULL,
+    display_name VARCHAR(120) NOT NULL,
+    description TEXT,
+    default_value TEXT,
+    required BOOLEAN NOT NULL DEFAULT FALSE,
+    value_type VARCHAR(40) NOT NULL DEFAULT 'string' CHECK (value_type IN ('string', 'number', 'boolean', 'enum', 'json')),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (template_version_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS marketplace_items (
     id UUID PRIMARY KEY,
-    item_type VARCHAR(40) NOT NULL CHECK (item_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter')),
+    item_type VARCHAR(40) NOT NULL CHECK (item_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter', 'system_prompt_template')),
     ref_id UUID NOT NULL,
     owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     visibility VARCHAR(32) NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
@@ -646,11 +696,23 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
     UNIQUE (item_type, ref_id)
 );
 
+CREATE TABLE IF NOT EXISTS marketplace_item_reviews (
+    id UUID PRIMARY KEY,
+    marketplace_item_id UUID NOT NULL REFERENCES marketplace_items(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (marketplace_item_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS user_capability_installs (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     marketplace_item_id UUID REFERENCES marketplace_items(id) ON DELETE SET NULL,
-    capability_type VARCHAR(40) NOT NULL CHECK (capability_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter')),
+    capability_type VARCHAR(40) NOT NULL CHECK (capability_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter', 'system_prompt_template')),
     capability_ref_id UUID NOT NULL,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     install_source VARCHAR(40) NOT NULL DEFAULT 'marketplace' CHECK (install_source IN ('marketplace', 'private', 'system')),
@@ -663,7 +725,7 @@ CREATE TABLE IF NOT EXISTS agent_capability_bindings (
     id UUID PRIMARY KEY,
     agent_config_id UUID NOT NULL REFERENCES user_agent_configs(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    capability_type VARCHAR(40) NOT NULL CHECK (capability_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter')),
+    capability_type VARCHAR(40) NOT NULL CHECK (capability_type IN ('tool', 'mcp_server', 'skill', 'knowledge_base', 'channel_adapter', 'system_prompt_template')),
     capability_ref_id UUID NOT NULL,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     load_mode VARCHAR(40) NOT NULL DEFAULT 'auto' CHECK (load_mode IN ('auto', 'light', 'standard', 'full')),
@@ -985,8 +1047,11 @@ CREATE INDEX IF NOT EXISTS idx_external_conversations_channel_external ON extern
 CREATE INDEX IF NOT EXISTS idx_channel_inbox_events_connection_status ON channel_inbox_events(channel_connection_id, status, received_at);
 CREATE INDEX IF NOT EXISTS idx_channel_inbox_events_conversation ON channel_inbox_events(conversation_id, received_at);
 CREATE INDEX IF NOT EXISTS idx_channel_outbox_messages_connection_status ON channel_outbox_messages(channel_connection_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_system_prompt_templates_owner_visibility ON system_prompt_templates(owner_user_id, visibility, status);
+CREATE INDEX IF NOT EXISTS idx_system_prompt_template_versions_template_status ON system_prompt_template_versions(template_id, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_items_type_visibility_status ON marketplace_items(item_type, visibility, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_items_tags ON marketplace_items USING GIN (tags);
+CREATE INDEX IF NOT EXISTS idx_marketplace_item_reviews_item_status ON marketplace_item_reviews(marketplace_item_id, status);
 CREATE INDEX IF NOT EXISTS idx_user_capability_installs_user_enabled ON user_capability_installs(user_id, is_enabled);
 CREATE INDEX IF NOT EXISTS idx_agent_capability_bindings_agent_enabled ON agent_capability_bindings(agent_config_id, is_enabled);
 CREATE INDEX IF NOT EXISTS idx_tool_router_logs_message ON tool_router_logs(message_id);

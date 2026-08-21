@@ -195,6 +195,59 @@ func (h *ChannelHandler) OutboxMessages(c *gin.Context) {
 	writeChannelList(c, items, err)
 }
 
+func (h *ChannelHandler) ApproveOutbox(c *gin.Context) {
+	h.resolveOutbox(c, "approve")
+}
+
+func (h *ChannelHandler) CancelOutbox(c *gin.Context) {
+	h.resolveOutbox(c, "cancel")
+}
+
+func (h *ChannelHandler) SendOutbox(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	message, err := h.channels.SendOutboxMessage(c.Request.Context(), userID, c.Param("outbox_id"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "approved outbox message not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to send outbox message")
+		return
+	}
+	OK(c, message)
+}
+
+func (h *ChannelHandler) resolveOutbox(c *gin.Context, action string) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	var (
+		message store.ChannelOutboxMessage
+		err     error
+	)
+	switch action {
+	case "approve":
+		message, err = h.channels.ApproveOutboxMessage(c.Request.Context(), userID, c.Param("outbox_id"))
+	case "cancel":
+		message, err = h.channels.CancelOutboxMessage(c.Request.Context(), userID, c.Param("outbox_id"))
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "pending outbox message not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update outbox message")
+		return
+	}
+	OK(c, message)
+}
+
 func writeChannelList(c *gin.Context, data any, err error) {
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

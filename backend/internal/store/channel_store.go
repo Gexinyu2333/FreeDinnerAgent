@@ -428,6 +428,25 @@ func (s *ChannelStore) ListInboxEvents(ctx context.Context, userID, connectionID
 	return events, rows.Err()
 }
 
+func (s *ChannelStore) CountRecentTriggeredInboxEvents(ctx context.Context, userID, connectionID, scopeType string, externalScopeID *string, since time.Time) (int, error) {
+	var count int
+	err := s.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM channel_inbox_events cie
+		LEFT JOIN external_conversations ec ON ec.id = cie.external_conversation_id
+		WHERE cie.user_id = $1
+		  AND cie.channel_connection_id = $2
+		  AND cie.should_trigger_agent = TRUE
+		  AND cie.received_at >= $5
+		  AND (
+		  	$3::text = 'all'
+		  	OR ec.external_conversation_type = $3
+		  	OR ($4::text IS NOT NULL AND ec.external_conversation_id = $4)
+		  )
+	`, userID, connectionID, scopeType, externalScopeID, since).Scan(&count)
+	return count, err
+}
+
 func (s *ChannelStore) CreateOutboxMessage(ctx context.Context, message ChannelOutboxMessage) (ChannelOutboxMessage, error) {
 	if len(message.Payload) == 0 {
 		message.Payload = json.RawMessage(`{}`)
@@ -472,6 +491,62 @@ func (s *ChannelStore) ListOutboxMessages(ctx context.Context, userID, connectio
 		messages = append(messages, message)
 	}
 	return messages, rows.Err()
+}
+
+func (s *ChannelStore) FindOutboxMessage(ctx context.Context, userID, outboxID string) (ChannelOutboxMessage, error) {
+	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+		SELECT id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+			external_message_id, error_message, created_at, approved_at, sent_at
+		FROM channel_outbox_messages
+		WHERE id = $1 AND user_id = $2
+	`, outboxID, userID))
+}
+
+func (s *ChannelStore) ResolveOutboxMessage(ctx context.Context, userID, outboxID, status string) (ChannelOutboxMessage, error) {
+	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+		UPDATE channel_outbox_messages
+		SET status = $3,
+			approved_at = CASE WHEN $3 = 'approved' THEN NOW() ELSE approved_at END,
+			error_message = CASE WHEN $3 = 'cancelled' THEN 'cancelled by user' ELSE error_message END
+		WHERE id = $1 AND user_id = $2 AND status = 'pending'
+		RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+			external_message_id, error_message, created_at, approved_at, sent_at
+	`, outboxID, userID, status))
+}
+
+func (s *ChannelStore) MarkOutboxSending(ctx context.Context, userID, outboxID string) (ChannelOutboxMessage, error) {
+	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+		UPDATE channel_outbox_messages
+		SET status = 'sending'
+		WHERE id = $1 AND user_id = $2 AND status = 'approved'
+		RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+			external_message_id, error_message, created_at, approved_at, sent_at
+	`, outboxID, userID))
+}
+
+func (s *ChannelStore) MarkOutboxSent(ctx context.Context, userID, outboxID string, externalMessageID *string) (ChannelOutboxMessage, error) {
+	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+		UPDATE channel_outbox_messages
+		SET status = 'sent', external_message_id = $3, sent_at = NOW(), error_message = NULL
+		WHERE id = $1 AND user_id = $2
+		RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+			external_message_id, error_message, created_at, approved_at, sent_at
+	`, outboxID, userID, externalMessageID))
+}
+
+func (s *ChannelStore) MarkOutboxFailed(ctx context.Context, userID, outboxID string, errorMessage string) (ChannelOutboxMessage, error) {
+	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+		UPDATE channel_outbox_messages
+		SET status = 'failed', error_message = $3
+		WHERE id = $1 AND user_id = $2
+		RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+			external_message_id, error_message, created_at, approved_at, sent_at
+	`, outboxID, userID, errorMessage))
 }
 
 func ToPublicChannelConnection(connection ChannelConnection) PublicChannelConnection {

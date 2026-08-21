@@ -7,15 +7,20 @@ import (
 	"strings"
 	"time"
 
+	"freedinner/backend/internal/agent"
 	"freedinner/backend/internal/knowledge"
 	"freedinner/backend/internal/store"
 	workspacesvc "freedinner/backend/internal/workspace"
 )
 
-var ErrUnsupportedTool = errors.New("unsupported tool")
+var (
+	ErrUnsupportedTool  = errors.New("unsupported tool")
+	ErrApprovalRequired = errors.New("tool approval required")
+)
 
 type Service struct {
 	tools     *store.ToolStore
+	agents    *store.AgentConfigStore
 	tasks     *store.TaskStore
 	memories  *store.MemoryStore
 	knowledge *knowledge.Service
@@ -27,16 +32,26 @@ type ExecuteInput struct {
 	ConversationID string
 	ToolName       string
 	Arguments      json.RawMessage
+	IdempotencyKey *string
 }
 
 type ExecuteResult struct {
-	ToolCall store.ToolCallLog `json:"tool_call"`
-	Result   json.RawMessage   `json:"result"`
+	ToolCall        store.ToolCallLog          `json:"tool_call"`
+	ApprovalRequest *store.ToolApprovalRequest `json:"approval_request,omitempty"`
+	Result          json.RawMessage            `json:"result"`
 }
 
-func NewService(tools *store.ToolStore, tasks *store.TaskStore, memories *store.MemoryStore, knowledgeService *knowledge.Service, workspaceService *workspacesvc.Service) *Service {
+type RouteInput struct {
+	UserID         string
+	ConversationID string
+	MessageID      *string
+	Query          string
+}
+
+func NewService(tools *store.ToolStore, agents *store.AgentConfigStore, tasks *store.TaskStore, memories *store.MemoryStore, knowledgeService *knowledge.Service, workspaceService *workspacesvc.Service) *Service {
 	return &Service{
 		tools:     tools,
+		agents:    agents,
 		tasks:     tasks,
 		memories:  memories,
 		knowledge: knowledgeService,
@@ -102,7 +117,7 @@ func BuiltinDefinitions() []store.BuiltinToolDefinition {
 			Category:         "system",
 			HandlerRef:       "builtin.workspace.run_command",
 			PermissionLevel:  "sensitive",
-			RequiresApproval: false,
+			RequiresApproval: true,
 			ParameterSchema:  rawSchema(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"args":{"type":"array","items":{"type":"string"}},"working_dir":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120}}}`),
 			ResultSchema:     rawSchema(`{"type":"object","properties":{"run":{"type":"object"}}}`),
 		},
@@ -117,11 +132,73 @@ func (s *Service) ListTools(ctx context.Context, userID string) ([]store.ToolDef
 	return s.tools.ListTools(ctx, userID)
 }
 
+func (s *Service) Route(ctx context.Context, input RouteInput) (agent.RouteResult, error) {
+	tools, err := s.routableTools(ctx, input.UserID)
+	if err != nil {
+		return agent.RouteResult{}, err
+	}
+	candidates := toToolDescriptors(tools)
+	result := agent.RouteTools(input.Query, candidates)
+	candidateJSON, _ := json.Marshal(result.Candidates)
+	selectedJSON, _ := json.Marshal(result.Selected)
+	_ = s.tools.CreateRouterLog(ctx, store.ToolRouterLogCreate{
+		UserID:         input.UserID,
+		ConversationID: input.ConversationID,
+		MessageID:      input.MessageID,
+		Query:          input.Query,
+		CandidateTools: candidateJSON,
+		SelectedTools:  selectedJSON,
+		RouteReason:    &result.Reason,
+		RiskLevel:      result.RiskLevel,
+	})
+	return result, nil
+}
+
+func (s *Service) routableTools(ctx context.Context, userID string) ([]store.ToolDefinition, error) {
+	if s.agents != nil {
+		cfg, err := s.agents.GetDefault(ctx, userID)
+		if err == nil {
+			bound, err := s.tools.ListAgentBoundTools(ctx, userID, cfg.ID)
+			if err != nil {
+				return nil, err
+			}
+			if len(bound) > 0 {
+				return bound, nil
+			}
+		}
+	}
+	return s.tools.ListTools(ctx, userID)
+}
+
+func (s *Service) RouteAgentTools(ctx context.Context, input agent.ToolRouteInput) (agent.RouteResult, error) {
+	return s.Route(ctx, RouteInput{
+		UserID:         input.UserID,
+		ConversationID: input.ConversationID,
+		MessageID:      input.MessageID,
+		Query:          input.Query,
+	})
+}
+
 func (s *Service) Execute(ctx context.Context, input ExecuteInput) (ExecuteResult, error) {
 	startedAt := time.Now()
 	toolDefinition, err := s.tools.FindTool(ctx, input.UserID, input.ToolName)
 	if err != nil {
 		return ExecuteResult{}, err
+	}
+	validatedArguments, validationErr := validateArguments(toolDefinition.ParameterSchema, input.Arguments)
+	if validationErr != nil {
+		duration := int(time.Since(startedAt).Milliseconds())
+		return s.logFailedCall(ctx, input, toolDefinition, input.Arguments, "validation_error", validationErr.Error(), duration)
+	}
+	input.Arguments = validatedArguments
+
+	approvalPolicy, err := s.approvalPolicy(ctx, input.UserID)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	if shouldRequireApproval(toolDefinition, approvalPolicy) {
+		duration := int(time.Since(startedAt).Milliseconds())
+		return s.createPendingApproval(ctx, input, toolDefinition, approvalPolicy, duration)
 	}
 
 	result, status, errorType, errorMessage := s.executeBuiltin(ctx, input)
@@ -138,6 +215,7 @@ func (s *Service) Execute(ctx context.Context, input ExecuteInput) (ExecuteResul
 		ToolID:             &toolID,
 		ToolName:           input.ToolName,
 		ToolVersion:        &version,
+		IdempotencyKey:     input.IdempotencyKey,
 		Arguments:          input.Arguments,
 		ValidatedArguments: input.Arguments,
 		Result:             result,
@@ -146,7 +224,7 @@ func (s *Service) Execute(ctx context.Context, input ExecuteInput) (ExecuteResul
 		ErrorMessage:       errorMessage,
 		AttemptCount:       1,
 		DurationMS:         &duration,
-		RequiresApproval:   toolDefinition.RequiresApproval,
+		RequiresApproval:   shouldRequireApproval(toolDefinition, approvalPolicy),
 		StartedAt:          startedAt,
 	})
 	if logErr != nil {
@@ -156,6 +234,177 @@ func (s *Service) Execute(ctx context.Context, input ExecuteInput) (ExecuteResul
 		return ExecuteResult{ToolCall: callLog, Result: result}, errors.New(*errorMessage)
 	}
 	return ExecuteResult{ToolCall: callLog, Result: result}, nil
+}
+
+func (s *Service) ExecuteAgentTool(ctx context.Context, input agent.ToolExecuteInput) (agent.ToolExecuteResult, error) {
+	result, err := s.Execute(ctx, ExecuteInput{
+		UserID:         input.UserID,
+		ConversationID: input.ConversationID,
+		ToolName:       input.ToolName,
+		Arguments:      input.Arguments,
+		IdempotencyKey: input.IdempotencyKey,
+	})
+	return agent.ToolExecuteResult{
+		ToolCall:        result.ToolCall,
+		ApprovalRequest: result.ApprovalRequest,
+		Result:          result.Result,
+	}, err
+}
+
+func toToolDescriptors(tools []store.ToolDefinition) []agent.ToolDescriptor {
+	result := make([]agent.ToolDescriptor, 0, len(tools))
+	for _, toolDefinition := range tools {
+		result = append(result, agent.ToolDescriptor{
+			ID:               toolDefinition.ID,
+			Name:             toolDefinition.Name,
+			DisplayName:      toolDefinition.DisplayName,
+			Description:      toolDefinition.Description,
+			PermissionLevel:  toolDefinition.PermissionLevel,
+			RequiresApproval: toolDefinition.RequiresApproval,
+			ParameterSchema:  toolDefinition.ParameterSchema,
+		})
+	}
+	return result
+}
+
+func (s *Service) GetToolCall(ctx context.Context, userID, callID string) (store.ToolCallLog, error) {
+	return s.tools.FindCallLog(ctx, userID, callID)
+}
+
+func (s *Service) ListConversationToolCalls(ctx context.Context, userID, conversationID string, limit int) ([]store.ToolCallLog, error) {
+	return s.tools.ListConversationCallLogs(ctx, userID, conversationID, limit)
+}
+
+func (s *Service) ResolveApproval(ctx context.Context, userID, approvalID, status string) (store.ToolApprovalRequest, error) {
+	if status != "approved" && status != "rejected" {
+		return store.ToolApprovalRequest{}, errors.New("approval status must be approved or rejected")
+	}
+	return s.tools.ResolveApprovalRequest(ctx, userID, approvalID, status)
+}
+
+func (s *Service) logFailedCall(ctx context.Context, input ExecuteInput, toolDefinition store.ToolDefinition, validatedArguments json.RawMessage, errorType string, message string, duration int) (ExecuteResult, error) {
+	toolID := toolDefinition.ID
+	version := activeVersion(toolDefinition)
+	approvalPolicy, _ := s.approvalPolicy(ctx, input.UserID)
+	result, _ := json.Marshal(map[string]any{"error": message})
+	callLog, err := s.tools.CreateCallLog(ctx, store.ToolCallLogCreate{
+		UserID:             input.UserID,
+		ConversationID:     input.ConversationID,
+		ToolID:             &toolID,
+		ToolName:           input.ToolName,
+		ToolVersion:        &version,
+		IdempotencyKey:     input.IdempotencyKey,
+		Arguments:          input.Arguments,
+		ValidatedArguments: validatedArguments,
+		Result:             result,
+		Status:             "failed",
+		ErrorType:          &errorType,
+		ErrorMessage:       &message,
+		AttemptCount:       0,
+		DurationMS:         &duration,
+		RequiresApproval:   shouldRequireApproval(toolDefinition, approvalPolicy),
+		StartedAt:          time.Now(),
+	})
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	return ExecuteResult{ToolCall: callLog, Result: result}, errors.New(message)
+}
+
+func (s *Service) createPendingApproval(ctx context.Context, input ExecuteInput, toolDefinition store.ToolDefinition, approvalPolicy string, duration int) (ExecuteResult, error) {
+	toolID := toolDefinition.ID
+	version := activeVersion(toolDefinition)
+	result, _ := json.Marshal(map[string]any{"status": "waiting_approval"})
+	callLog, err := s.tools.CreateCallLog(ctx, store.ToolCallLogCreate{
+		UserID:             input.UserID,
+		ConversationID:     input.ConversationID,
+		ToolID:             &toolID,
+		ToolName:           input.ToolName,
+		ToolVersion:        &version,
+		IdempotencyKey:     input.IdempotencyKey,
+		Arguments:          input.Arguments,
+		ValidatedArguments: input.Arguments,
+		Result:             result,
+		Status:             "pending",
+		AttemptCount:       0,
+		DurationMS:         &duration,
+		RequiresApproval:   true,
+		StartedAt:          time.Now(),
+	})
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	approval, err := s.tools.CreateApprovalRequest(ctx, store.ToolApprovalRequestCreate{
+		ToolCallID:        callLog.ID,
+		UserID:            input.UserID,
+		ConversationID:    input.ConversationID,
+		ApprovalReason:    approvalReason(toolDefinition, approvalPolicy),
+		RiskLevel:         riskLevel(toolDefinition),
+		ProposedArguments: input.Arguments,
+	})
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	return ExecuteResult{ToolCall: callLog, ApprovalRequest: &approval, Result: result}, ErrApprovalRequired
+}
+
+func activeVersion(toolDefinition store.ToolDefinition) int {
+	if toolDefinition.ActiveVersion != nil {
+		return *toolDefinition.ActiveVersion
+	}
+	return 1
+}
+
+func (s *Service) approvalPolicy(ctx context.Context, userID string) (string, error) {
+	if s.agents == nil {
+		return "sensitive_only", nil
+	}
+	cfg, err := s.agents.GetDefault(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return normalizeApprovalPolicy(cfg.ToolApprovalPolicy), nil
+}
+
+func shouldRequireApproval(toolDefinition store.ToolDefinition, approvalPolicy string) bool {
+	switch normalizeApprovalPolicy(approvalPolicy) {
+	case "always":
+		return true
+	case "never":
+		return false
+	default:
+		if toolDefinition.RequiresApproval {
+			return true
+		}
+		return toolDefinition.PermissionLevel == "sensitive" || toolDefinition.PermissionLevel == "destructive"
+	}
+}
+
+func riskLevel(toolDefinition store.ToolDefinition) string {
+	switch toolDefinition.PermissionLevel {
+	case "destructive":
+		return "destructive"
+	case "sensitive":
+		return "sensitive"
+	default:
+		return "normal"
+	}
+}
+
+func approvalReason(toolDefinition store.ToolDefinition, approvalPolicy string) string {
+	if normalizeApprovalPolicy(approvalPolicy) == "always" {
+		return "你已设置所有工具调用都需要确认。工具「" + toolDefinition.DisplayName + "」等待批准。"
+	}
+	return "工具「" + toolDefinition.DisplayName + "」需要用户确认后才能执行。"
+}
+
+func normalizeApprovalPolicy(value string) string {
+	switch value {
+	case "never", "always":
+		return value
+	default:
+		return "sensitive_only"
+	}
 }
 
 func (s *Service) executeBuiltin(ctx context.Context, input ExecuteInput) (json.RawMessage, string, *string, *string) {

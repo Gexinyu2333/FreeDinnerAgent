@@ -20,10 +20,14 @@ type ChatMessage struct {
 }
 
 type GenerateRequest struct {
-	APIKey  string
-	BaseURL *string
-	Model   string
-	Input   []ChatMessage
+	APIKey               string
+	BaseURL              *string
+	Model                string
+	Input                []ChatMessage
+	Temperature          float64
+	ThinkingEnabled      bool
+	ThinkingEffort       string
+	ThinkingBudgetTokens int
 }
 
 type GenerateResponse struct {
@@ -69,8 +73,17 @@ func (c *OpenAIClient) Generate(ctx context.Context, req GenerateRequest) (Gener
 
 	startedAt := time.Now()
 	body := openAIResponsesRequest{
-		Model: req.Model,
-		Input: make([]openAIInputMessage, 0, len(req.Input)),
+		Model:       req.Model,
+		Input:       make([]openAIInputMessage, 0, len(req.Input)),
+		Temperature: normalizedTemperature(req.Temperature),
+	}
+	if req.ThinkingEnabled {
+		body.Reasoning = &openAIReasoning{
+			Effort: normalizedThinkingEffort(req.ThinkingEffort),
+		}
+		if req.ThinkingBudgetTokens > 0 {
+			body.Reasoning.BudgetTokens = req.ThinkingBudgetTokens
+		}
 	}
 	for _, msg := range req.Input {
 		if strings.TrimSpace(msg.Content) == "" {
@@ -208,7 +221,7 @@ func (c *OpenAIClient) generateChatCompletions(ctx context.Context, req Generate
 		Model:       req.Model,
 		Messages:    make([]openAIChatMessage, 0, len(req.Input)),
 		MaxTokens:   1000,
-		Temperature: 0.7,
+		Temperature: normalizedTemperature(req.Temperature),
 	}
 	for _, msg := range req.Input {
 		if strings.TrimSpace(msg.Content) == "" {
@@ -302,8 +315,15 @@ func isChatCompletionsEndpoint(endpoint string) bool {
 }
 
 type openAIResponsesRequest struct {
-	Model string               `json:"model"`
-	Input []openAIInputMessage `json:"input"`
+	Model       string               `json:"model"`
+	Input       []openAIInputMessage `json:"input"`
+	Temperature float64              `json:"temperature,omitempty"`
+	Reasoning   *openAIReasoning     `json:"reasoning,omitempty"`
+}
+
+type openAIReasoning struct {
+	Effort       string `json:"effort,omitempty"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
 type openAIInputMessage struct {
@@ -391,4 +411,20 @@ func (r openAIResponsesResponse) collectText() string {
 		}
 	}
 	return builder.String()
+}
+
+func normalizedTemperature(value float64) float64 {
+	if value < 0 || value > 2 {
+		return 0.7
+	}
+	return value
+}
+
+func normalizedThinkingEffort(value string) string {
+	switch value {
+	case "low", "high":
+		return value
+	default:
+		return "medium"
+	}
 }

@@ -120,6 +120,24 @@ type WorkspaceUpsert struct {
 	Metadata            json.RawMessage
 }
 
+type WorkspacePolicyUpdate struct {
+	UserID              string
+	WorkspaceID         string
+	SandboxType         string
+	NetworkPolicy       string
+	NetworkAllowlist    []string
+	MaxDiskBytes        int64
+	MaxFileCount        int
+	MaxSingleFileBytes  int64
+	MaxCommandSeconds   int
+	MaxStdoutBytes      int
+	MaxStderrBytes      int
+	CPULimit            *string
+	MemoryLimitBytes    *int64
+	IdleAfterSeconds    int
+	DestroyAfterSeconds int
+}
+
 type WorkspaceFileUpsert struct {
 	UserID       string
 	WorkspaceID  string
@@ -230,6 +248,47 @@ func (s *WorkspaceStore) Touch(ctx context.Context, userID, workspaceID string) 
 		WHERE id = $1 AND user_id = $2
 	`, workspaceID, userID)
 	return err
+}
+
+func (s *WorkspaceStore) UpdatePolicy(ctx context.Context, input WorkspacePolicyUpdate) (UserWorkspace, error) {
+	return scanUserWorkspace(s.db.QueryRow(ctx, `
+		UPDATE user_workspaces
+		SET sandbox_type = $3,
+			network_policy = $4,
+			network_allowlist = $5,
+			max_disk_bytes = $6,
+			max_file_count = $7,
+			max_single_file_bytes = $8,
+			max_command_seconds = $9,
+			max_stdout_bytes = $10,
+			max_stderr_bytes = $11,
+			cpu_limit = $12,
+			memory_limit_bytes = $13,
+			idle_after_seconds = $14,
+			destroy_after_seconds = $15,
+			updated_at = NOW()
+		WHERE id = $1 AND user_id = $2 AND status <> 'destroyed'
+		RETURNING id, user_id, status, root_path, sandbox_type, network_policy, network_allowlist,
+			max_disk_bytes, max_file_count, max_single_file_bytes, max_command_seconds,
+			max_stdout_bytes, max_stderr_bytes, cpu_limit, memory_limit_bytes, last_active_at,
+			idle_after_seconds, destroy_after_seconds, metadata, created_at, updated_at
+	`, input.WorkspaceID, input.UserID, input.SandboxType, input.NetworkPolicy, input.NetworkAllowlist,
+		input.MaxDiskBytes, input.MaxFileCount, input.MaxSingleFileBytes, input.MaxCommandSeconds,
+		input.MaxStdoutBytes, input.MaxStderrBytes, input.CPULimit, input.MemoryLimitBytes,
+		input.IdleAfterSeconds, input.DestroyAfterSeconds))
+}
+
+func (s *WorkspaceStore) MarkDestroyed(ctx context.Context, userID, workspaceID string) (UserWorkspace, error) {
+	return scanUserWorkspace(s.db.QueryRow(ctx, `
+		UPDATE user_workspaces
+		SET status = 'destroyed',
+			updated_at = NOW()
+		WHERE id = $1 AND user_id = $2 AND status <> 'destroyed'
+		RETURNING id, user_id, status, root_path, sandbox_type, network_policy, network_allowlist,
+			max_disk_bytes, max_file_count, max_single_file_bytes, max_command_seconds,
+			max_stdout_bytes, max_stderr_bytes, cpu_limit, memory_limit_bytes, last_active_at,
+			idle_after_seconds, destroy_after_seconds, metadata, created_at, updated_at
+	`, workspaceID, userID))
 }
 
 func (s *WorkspaceStore) UpsertFile(ctx context.Context, input WorkspaceFileUpsert) (WorkspaceFile, error) {
