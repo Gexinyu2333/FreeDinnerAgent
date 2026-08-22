@@ -3,8 +3,10 @@ package tool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"freedinner/backend/internal/store"
@@ -107,7 +109,7 @@ func TestResolveApprovalRejectsInvalidStatus(t *testing.T) {
 
 func TestExecuteMCPToolCallsHTTPBridge(t *testing.T) {
 	var method string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newHTTPTestServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			Method string `json:"method"`
 		}
@@ -134,4 +136,18 @@ func TestExecuteMCPToolCallsHTTPBridge(t *testing.T) {
 	if method != "tools/call" {
 		t.Fatalf("expected tools/call, got %q", method)
 	}
+}
+
+func newHTTPTestServerOrSkip(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			message := fmt.Sprint(recovered)
+			if strings.Contains(message, "operation not permitted") {
+				t.Skipf("httptest listener unavailable in this sandbox: %s", message)
+			}
+			panic(recovered)
+		}
+	}()
+	return httptest.NewServer(handler)
 }

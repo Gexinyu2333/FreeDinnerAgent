@@ -23,11 +23,27 @@ export type PublicChannelConnection = {
   display_name: string;
   external_account_id: string | null;
   external_account_name: string | null;
+  endpoints: ChannelConnectionEndpoint[];
   has_config: boolean;
   status: string;
   last_health_status: string | null;
   last_event_at: string | null;
   last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChannelConnectionEndpoint = {
+  id: string;
+  channel_connection_id: string;
+  endpoint_type: string;
+  display_name: string;
+  direction: string;
+  transport: string;
+  url: string;
+  has_secret: boolean;
+  status: string;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -111,7 +127,18 @@ export type CreateChannelConnectionInput = {
   display_name: string;
   external_account_id?: string | null;
   external_account_name?: string | null;
+  endpoints?: CreateChannelEndpointInput[];
   config?: Record<string, unknown>;
+};
+
+export type CreateChannelEndpointInput = {
+  endpoint_type: string;
+  display_name: string;
+  direction: string;
+  transport: string;
+  url: string;
+  config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 };
 
 export type UpsertChannelPolicyInput = {

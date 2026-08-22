@@ -36,6 +36,20 @@ func scanChannelConnection(row pgx.Row) (ChannelConnection, error) {
 	return connection, nil
 }
 
+func scanChannelConnectionEndpoint(row pgx.Row) (ChannelConnectionEndpoint, error) {
+	var endpoint ChannelConnectionEndpoint
+	err := row.Scan(&endpoint.ID, &endpoint.UserID, &endpoint.ChannelConnectionID, &endpoint.EndpointType,
+		&endpoint.DisplayName, &endpoint.Direction, &endpoint.Transport, &endpoint.URL, &endpoint.EncryptedConfig,
+		&endpoint.Status, &endpoint.Metadata, &endpoint.CreatedAt, &endpoint.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ChannelConnectionEndpoint{}, ErrNotFound
+		}
+		return ChannelConnectionEndpoint{}, err
+	}
+	return endpoint, nil
+}
+
 func scanChannelPolicy(row pgx.Row) (ChannelPolicy, error) {
 	var policy ChannelPolicy
 	err := row.Scan(&policy.ID, &policy.UserID, &policy.ChannelConnectionID, &policy.ScopeType,

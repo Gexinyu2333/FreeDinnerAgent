@@ -33,7 +33,18 @@ type CreateConnectionInput struct {
 	DisplayName         string
 	ExternalAccountID   *string
 	ExternalAccountName *string
+	Endpoints           []EndpointInput
 	Config              json.RawMessage
+}
+
+type EndpointInput struct {
+	EndpointType string
+	DisplayName  string
+	Direction    string
+	Transport    string
+	URL          string
+	SecretConfig json.RawMessage
+	Metadata     json.RawMessage
 }
 
 type UpsertPolicyInput struct {
@@ -100,7 +111,15 @@ func (s *Service) ListProviders(ctx context.Context) ([]store.ChannelProviderDef
 }
 
 func (s *Service) CreateConnection(ctx context.Context, input CreateConnectionInput) (store.ChannelConnection, error) {
-	encryptedConfig, err := s.encryptConfig(input.Config)
+	cfg := normalizeConnectionConfig(input.Config)
+	if input.ExternalAccountID == nil && strings.TrimSpace(cfg.BotQQ) != "" {
+		input.ExternalAccountID = &cfg.BotQQ
+	}
+	normalizedConfig, err := json.Marshal(cfg)
+	if err != nil {
+		return store.ChannelConnection{}, err
+	}
+	encryptedConfig, err := s.encryptConfig(normalizedConfig)
 	if err != nil {
 		return store.ChannelConnection{}, err
 	}
@@ -113,6 +132,9 @@ func (s *Service) CreateConnection(ctx context.Context, input CreateConnectionIn
 		EncryptedConfig:     encryptedConfig,
 	})
 	if err != nil {
+		return store.ChannelConnection{}, err
+	}
+	if err := s.createConnectionEndpoints(ctx, input.UserID, connection.ID, input.Endpoints); err != nil {
 		return store.ChannelConnection{}, err
 	}
 
@@ -145,8 +167,80 @@ func (s *Service) CreateConnection(ctx context.Context, input CreateConnectionIn
 	return connection, nil
 }
 
+func normalizeConnectionConfig(raw json.RawMessage) connectionConfig {
+	if len(raw) == 0 {
+		return connectionConfig{}
+	}
+	var values map[string]any
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return connectionConfig{}
+	}
+	get := func(keys ...string) string {
+		for _, key := range keys {
+			if value, ok := values[key]; ok {
+				if text := strings.TrimSpace(valueToString(value)); text != "" {
+					return text
+				}
+			}
+		}
+		return ""
+	}
+	return connectionConfig{
+		AccessToken:   get("access_token", "token"),
+		WebhookSecret: get("webhook_secret", "secret"),
+		BotQQ:         get("bot_qq", "bot_account_id", "self_id"),
+	}
+}
+
+func (s *Service) createConnectionEndpoints(ctx context.Context, userID, connectionID string, endpoints []EndpointInput) error {
+	for _, endpoint := range endpoints {
+		url := strings.TrimSpace(endpoint.URL)
+		endpointType := strings.TrimSpace(endpoint.EndpointType)
+		if url == "" || endpointType == "" {
+			continue
+		}
+		secretConfig, err := s.encryptOptionalConfig(endpoint.SecretConfig)
+		if err != nil {
+			return err
+		}
+		if _, err := s.channels.CreateEndpoint(ctx, store.ChannelConnectionEndpointCreate{
+			UserID:              userID,
+			ChannelConnectionID: connectionID,
+			EndpointType:        endpointType,
+			DisplayName:         defaultString(endpoint.DisplayName, endpointType),
+			Direction:           defaultString(endpoint.Direction, "bidirectional"),
+			Transport:           defaultString(endpoint.Transport, "http"),
+			URL:                 url,
+			EncryptedConfig:     secretConfig,
+			Metadata:            endpoint.Metadata,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) encryptOptionalConfig(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "{}" {
+		return json.RawMessage(`{}`), nil
+	}
+	return s.encryptConfig(raw)
+}
+
+func defaultString(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 func (s *Service) ListConnections(ctx context.Context, userID string) ([]store.ChannelConnection, error) {
 	return s.channels.ListConnections(ctx, userID)
+}
+
+func (s *Service) ListEndpoints(ctx context.Context, userID, connectionID string) ([]store.ChannelConnectionEndpoint, error) {
+	return s.channels.ListEndpoints(ctx, userID, connectionID)
 }
 
 func (s *Service) ListPolicies(ctx context.Context, userID, connectionID string) ([]store.ChannelPolicy, error) {

@@ -43,19 +43,20 @@ type ChannelConnection struct {
 }
 
 type PublicChannelConnection struct {
-	ID                  string     `json:"id"`
-	UserID              string     `json:"user_id"`
-	ProviderID          string     `json:"provider_id"`
-	DisplayName         string     `json:"display_name"`
-	ExternalAccountID   *string    `json:"external_account_id"`
-	ExternalAccountName *string    `json:"external_account_name"`
-	HasConfig           bool       `json:"has_config"`
-	Status              string     `json:"status"`
-	LastHealthStatus    *string    `json:"last_health_status"`
-	LastEventAt         *time.Time `json:"last_event_at"`
-	LastCheckedAt       *time.Time `json:"last_checked_at"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	ID                  string                            `json:"id"`
+	UserID              string                            `json:"user_id"`
+	ProviderID          string                            `json:"provider_id"`
+	DisplayName         string                            `json:"display_name"`
+	ExternalAccountID   *string                           `json:"external_account_id"`
+	ExternalAccountName *string                           `json:"external_account_name"`
+	Endpoints           []PublicChannelConnectionEndpoint `json:"endpoints"`
+	HasConfig           bool                              `json:"has_config"`
+	Status              string                            `json:"status"`
+	LastHealthStatus    *string                           `json:"last_health_status"`
+	LastEventAt         *time.Time                        `json:"last_event_at"`
+	LastCheckedAt       *time.Time                        `json:"last_checked_at"`
+	CreatedAt           time.Time                         `json:"created_at"`
+	UpdatedAt           time.Time                         `json:"updated_at"`
 }
 
 type ChannelPolicy struct {
@@ -142,6 +143,49 @@ type ChannelConnectionCreate struct {
 	Metadata            json.RawMessage
 }
 
+type ChannelConnectionEndpoint struct {
+	ID                  string          `json:"id"`
+	UserID              string          `json:"user_id"`
+	ChannelConnectionID string          `json:"channel_connection_id"`
+	EndpointType        string          `json:"endpoint_type"`
+	DisplayName         string          `json:"display_name"`
+	Direction           string          `json:"direction"`
+	Transport           string          `json:"transport"`
+	URL                 string          `json:"url"`
+	EncryptedConfig     json.RawMessage `json:"-"`
+	Status              string          `json:"status"`
+	Metadata            json.RawMessage `json:"metadata"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+}
+
+type PublicChannelConnectionEndpoint struct {
+	ID                  string          `json:"id"`
+	ChannelConnectionID string          `json:"channel_connection_id"`
+	EndpointType        string          `json:"endpoint_type"`
+	DisplayName         string          `json:"display_name"`
+	Direction           string          `json:"direction"`
+	Transport           string          `json:"transport"`
+	URL                 string          `json:"url"`
+	HasSecret           bool            `json:"has_secret"`
+	Status              string          `json:"status"`
+	Metadata            json.RawMessage `json:"metadata"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+}
+
+type ChannelConnectionEndpointCreate struct {
+	UserID              string
+	ChannelConnectionID string
+	EndpointType        string
+	DisplayName         string
+	Direction           string
+	Transport           string
+	URL                 string
+	EncryptedConfig     json.RawMessage
+	Metadata            json.RawMessage
+}
+
 type ChannelPolicyUpsert struct {
 	UserID                     string
 	ChannelConnectionID        string
@@ -180,5 +224,22 @@ func ToPublicChannelConnection(connection ChannelConnection) PublicChannelConnec
 		LastCheckedAt:       connection.LastCheckedAt,
 		CreatedAt:           connection.CreatedAt,
 		UpdatedAt:           connection.UpdatedAt,
+	}
+}
+
+func ToPublicChannelConnectionEndpoint(endpoint ChannelConnectionEndpoint) PublicChannelConnectionEndpoint {
+	return PublicChannelConnectionEndpoint{
+		ID:                  endpoint.ID,
+		ChannelConnectionID: endpoint.ChannelConnectionID,
+		EndpointType:        endpoint.EndpointType,
+		DisplayName:         endpoint.DisplayName,
+		Direction:           endpoint.Direction,
+		Transport:           endpoint.Transport,
+		URL:                 endpoint.URL,
+		HasSecret:           len(endpoint.EncryptedConfig) > 0 && string(endpoint.EncryptedConfig) != "{}",
+		Status:              endpoint.Status,
+		Metadata:            endpoint.Metadata,
+		CreatedAt:           endpoint.CreatedAt,
+		UpdatedAt:           endpoint.UpdatedAt,
 	}
 }

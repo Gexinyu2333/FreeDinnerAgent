@@ -6,9 +6,9 @@ import (
 )
 
 type connectionConfig struct {
-	Endpoint      string `json:"endpoint"`
 	AccessToken   string `json:"access_token"`
 	WebhookSecret string `json:"webhook_secret"`
+	BotQQ         string `json:"bot_qq"`
 }
 
 func (s *Service) encryptConfig(raw json.RawMessage) (json.RawMessage, error) {

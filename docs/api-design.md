@@ -826,14 +826,40 @@ POST /api/v1/me/channel-connections
   "external_account_id": "123456",
   "external_account_name": "FreeDinnerBot",
   "config": {
-    "endpoint": "http://127.0.0.1:3000",
     "access_token": "secret",
-    "webhook_secret": "secret"
-  }
+    "webhook_secret": "secret",
+    "bot_qq": "123456"
+  },
+  "endpoints": [
+    {
+      "endpoint_type": "message_api",
+      "display_name": "NapCat HTTP API",
+      "direction": "outbound",
+      "transport": "http",
+      "url": "http://127.0.0.1:3000",
+      "config": { "access_token": "secret" }
+    },
+    {
+      "endpoint_type": "event_stream",
+      "display_name": "NapCat HTTP SSE",
+      "direction": "inbound",
+      "transport": "http_sse",
+      "url": "http://127.0.0.1:3000/sse",
+      "config": { "access_token": "secret" }
+    },
+    {
+      "endpoint_type": "webhook_callback",
+      "display_name": "FreeDinnerAgent Webhook",
+      "direction": "inbound",
+      "transport": "http",
+      "url": "http://127.0.0.1:8080/api/v1/channels/<connection_id>/webhook",
+      "config": { "webhook_secret": "secret" }
+    }
+  ]
 }
 ```
 
-`config` 中的敏感字段加密写入 `channel_connections.encrypted_config`。
+URL 类字段写入通用的 `channel_connection_endpoints`，避免为 NapCat、微信、Discord、飞书等不同平台不断给主表加列。`config` 和 endpoint `config` 中的 token/secret 等敏感字段加密写入 `encrypted_config`。NapCat 的 HTTP SSE 服务器、HTTP 客户端配置方式见 `backend/NAPCATQQ.md`。
 
 ### 获取我的渠道连接
 

@@ -574,6 +574,23 @@ CREATE TABLE IF NOT EXISTS channel_connections (
     UNIQUE (user_id, provider_id, display_name)
 );
 
+CREATE TABLE IF NOT EXISTS channel_connection_endpoints (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_connection_id UUID NOT NULL REFERENCES channel_connections(id) ON DELETE CASCADE,
+    endpoint_type VARCHAR(80) NOT NULL,
+    display_name VARCHAR(160) NOT NULL,
+    direction VARCHAR(32) NOT NULL CHECK (direction IN ('inbound', 'outbound', 'bidirectional')),
+    transport VARCHAR(40) NOT NULL CHECK (transport IN ('http', 'http_sse', 'websocket', 'grpc', 'custom')),
+    url TEXT NOT NULL,
+    encrypted_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'revoked', 'deleted')),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (channel_connection_id, endpoint_type)
+);
+
 CREATE TABLE IF NOT EXISTS channel_policies (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1065,6 +1082,8 @@ CREATE INDEX IF NOT EXISTS idx_mcp_server_definitions_visibility_status ON mcp_s
 CREATE INDEX IF NOT EXISTS idx_user_mcp_server_settings_user_enabled ON user_mcp_server_settings(user_id, is_enabled);
 CREATE INDEX IF NOT EXISTS idx_channel_provider_definitions_type_status ON channel_provider_definitions(provider_type, status);
 CREATE INDEX IF NOT EXISTS idx_channel_connections_user_status ON channel_connections(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_channel_connection_endpoints_connection_status ON channel_connection_endpoints(channel_connection_id, status);
+CREATE INDEX IF NOT EXISTS idx_channel_connection_endpoints_type_status ON channel_connection_endpoints(endpoint_type, status);
 CREATE INDEX IF NOT EXISTS idx_channel_policies_connection_scope ON channel_policies(channel_connection_id, scope_type, external_scope_id);
 CREATE INDEX IF NOT EXISTS idx_external_conversations_channel_external ON external_conversations(channel_connection_id, external_conversation_id);
 CREATE INDEX IF NOT EXISTS idx_channel_inbox_events_connection_status ON channel_inbox_events(channel_connection_id, status, received_at);

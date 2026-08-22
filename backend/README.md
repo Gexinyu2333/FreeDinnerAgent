@@ -309,7 +309,7 @@ NAPCAT_PROVIDER_ID="<channel-providers 里 name=napcatqq 的 id>"
 curl -sS -X POST http://localhost:8080/api/v1/me/channel-connections \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider_id":"'"$NAPCAT_PROVIDER_ID"'","display_name":"本地 NapCatQQ","external_account_id":"你的机器人 QQ 号","external_account_name":"FreeDinnerBot","config":{"endpoint":"http://127.0.0.1:3000","access_token":"napcat-token","webhook_secret":"hook-secret"}}'
+  -d '{"provider_id":"'"$NAPCAT_PROVIDER_ID"'","display_name":"本地 NapCatQQ","external_account_id":"你的机器人 QQ 号","external_account_name":"FreeDinnerBot","config":{"access_token":"napcat-token","webhook_secret":"hook-secret","bot_qq":"你的机器人 QQ 号"},"endpoints":[{"endpoint_type":"message_api","display_name":"NapCat HTTP API","direction":"outbound","transport":"http","url":"http://127.0.0.1:3000","config":{"access_token":"napcat-token"}},{"endpoint_type":"event_stream","display_name":"NapCat HTTP SSE","direction":"inbound","transport":"http_sse","url":"http://127.0.0.1:3000/sse","config":{"access_token":"napcat-token"}},{"endpoint_type":"webhook_callback","display_name":"FreeDinnerAgent Webhook","direction":"inbound","transport":"http","url":"http://127.0.0.1:8080/api/v1/channels/<connection_id>/webhook","config":{"webhook_secret":"hook-secret"}}]}'
 ```
 
 NapCatQQ / OneBot Webhook 地址：
@@ -318,6 +318,8 @@ NapCatQQ / OneBot Webhook 地址：
 POST http://localhost:8080/api/v1/channels/<connection_id>/webhook
 Header: X-FreeDinner-Webhook-Secret: hook-secret
 ```
+
+NapCat 部署与 HTTP SSE 服务器、HTTP 客户端配置说明见 [NAPCATQQ.md](NAPCATQQ.md)。`message_api` / `event_stream` / `webhook_callback` 的 URL 只要求被对应服务进程访问到，具体使用公网、内网、localhost 或隧道由部署方式决定。
 
 本地模拟一条 QQ 私聊消息：
 

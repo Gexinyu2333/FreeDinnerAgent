@@ -379,12 +379,20 @@
     "connection": {
       "create": "创建连接",
       "created": "Channel 连接已创建",
+      "accessToken": "NapCat 访问 Token",
+      "messageApiUrl": "NapCat HTTP API URL，用于发送 /send_msg",
+      "eventStreamUrl": "NapCat HTTP SSE 服务器 URL，用于后续监听事件",
+      "advancedConfig": "高级配置 JSON，可留空为 {}",
       "displayName": "显示名称",
       "externalAccountId": "外部账号 ID",
       "externalAccountName": "外部账号名称",
+      "hasSecret": "含密钥",
       "lastEventAt": "最近事件",
+      "noEndpoints": "暂无 endpoint 配置",
       "noExternalAccount": "未填写外部账号",
-      "provider": "Provider"
+      "provider": "Provider",
+      "webhookCallbackUrl": "FreeDinnerAgent Webhook URL，填到 NapCat HTTP 客户端",
+      "webhookSecret": "Webhook Secret / Token"
     },
     "connections": {
       "title": "连接列表",

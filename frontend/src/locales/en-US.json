@@ -379,12 +379,20 @@
     "connection": {
       "create": "Create connection",
       "created": "Channel connection created",
+      "accessToken": "NapCat access token",
+      "messageApiUrl": "NapCat HTTP API URL for /send_msg",
+      "eventStreamUrl": "NapCat HTTP SSE server URL for future event listening",
+      "advancedConfig": "Advanced config JSON, leave as {} if unused",
       "displayName": "Display name",
       "externalAccountId": "External account ID",
       "externalAccountName": "External account name",
+      "hasSecret": "Has secret",
       "lastEventAt": "Last event",
+      "noEndpoints": "No endpoints configured",
       "noExternalAccount": "No external account",
-      "provider": "Provider"
+      "provider": "Provider",
+      "webhookCallbackUrl": "FreeDinnerAgent webhook URL configured in NapCat HTTP client",
+      "webhookSecret": "Webhook secret / token"
     },
     "connections": {
       "title": "Connections",

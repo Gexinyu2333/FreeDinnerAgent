@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,11 +22,22 @@ func NewChannelHandler(channels *channelsvc.Service) *ChannelHandler {
 }
 
 type createChannelConnectionRequest struct {
-	ProviderID          string          `json:"provider_id" binding:"required"`
-	DisplayName         string          `json:"display_name" binding:"required"`
-	ExternalAccountID   *string         `json:"external_account_id"`
-	ExternalAccountName *string         `json:"external_account_name"`
-	Config              json.RawMessage `json:"config"`
+	ProviderID          string            `json:"provider_id" binding:"required"`
+	DisplayName         string            `json:"display_name" binding:"required"`
+	ExternalAccountID   *string           `json:"external_account_id"`
+	ExternalAccountName *string           `json:"external_account_name"`
+	Endpoints           []endpointRequest `json:"endpoints"`
+	Config              json.RawMessage   `json:"config"`
+}
+
+type endpointRequest struct {
+	EndpointType string          `json:"endpoint_type"`
+	DisplayName  string          `json:"display_name"`
+	Direction    string          `json:"direction"`
+	Transport    string          `json:"transport"`
+	URL          string          `json:"url"`
+	Config       json.RawMessage `json:"config"`
+	Metadata     json.RawMessage `json:"metadata"`
 }
 
 type upsertChannelPolicyRequest struct {
@@ -72,6 +84,7 @@ func (h *ChannelHandler) CreateConnection(c *gin.Context) {
 		DisplayName:         req.DisplayName,
 		ExternalAccountID:   req.ExternalAccountID,
 		ExternalAccountName: req.ExternalAccountName,
+		Endpoints:           toEndpointInputs(req.Endpoints),
 		Config:              req.Config,
 	})
 	if err != nil {
@@ -82,7 +95,12 @@ func (h *ChannelHandler) CreateConnection(c *gin.Context) {
 		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create channel connection")
 		return
 	}
-	OK(c, store.ToPublicChannelConnection(connection))
+	data, err := h.publicConnection(c.Request.Context(), userID, connection)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load channel connection endpoints")
+		return
+	}
+	OK(c, data)
 }
 
 func (h *ChannelHandler) Connections(c *gin.Context) {
@@ -99,9 +117,43 @@ func (h *ChannelHandler) Connections(c *gin.Context) {
 	}
 	data := make([]store.PublicChannelConnection, 0, len(connections))
 	for _, connection := range connections {
-		data = append(data, store.ToPublicChannelConnection(connection))
+		item, err := h.publicConnection(c.Request.Context(), userID, connection)
+		if err != nil {
+			Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load channel connection endpoints")
+			return
+		}
+		data = append(data, item)
 	}
 	OK(c, data)
+}
+
+func (h *ChannelHandler) publicConnection(ctx context.Context, userID string, connection store.ChannelConnection) (store.PublicChannelConnection, error) {
+	data := store.ToPublicChannelConnection(connection)
+	endpoints, err := h.channels.ListEndpoints(ctx, userID, connection.ID)
+	if err != nil {
+		return store.PublicChannelConnection{}, err
+	}
+	data.Endpoints = make([]store.PublicChannelConnectionEndpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		data.Endpoints = append(data.Endpoints, store.ToPublicChannelConnectionEndpoint(endpoint))
+	}
+	return data, nil
+}
+
+func toEndpointInputs(items []endpointRequest) []channelsvc.EndpointInput {
+	result := make([]channelsvc.EndpointInput, 0, len(items))
+	for _, item := range items {
+		result = append(result, channelsvc.EndpointInput{
+			EndpointType: item.EndpointType,
+			DisplayName:  item.DisplayName,
+			Direction:    item.Direction,
+			Transport:    item.Transport,
+			URL:          item.URL,
+			SecretConfig: item.Config,
+			Metadata:     item.Metadata,
+		})
+	}
+	return result
 }
 
 func (h *ChannelHandler) UpsertPolicy(c *gin.Context) {
@@ -151,10 +203,7 @@ func (h *ChannelHandler) Policies(c *gin.Context) {
 }
 
 func (h *ChannelHandler) Webhook(c *gin.Context) {
-	secret := c.GetHeader("X-FreeDinner-Webhook-Secret")
-	if secret == "" {
-		secret = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	}
+	secret := webhookSecret(c)
 	raw, err := c.GetRawData()
 	if err != nil {
 		Error(c, http.StatusBadRequest, "BAD_REQUEST", "failed to read request body")
@@ -174,6 +223,29 @@ func (h *ChannelHandler) Webhook(c *gin.Context) {
 		return
 	}
 	OK(c, result)
+}
+
+func webhookSecret(c *gin.Context) string {
+	for _, header := range []string{"X-FreeDinner-Webhook-Secret", "X-Access-Token", "X-Token"} {
+		if secret := strings.TrimSpace(c.GetHeader(header)); secret != "" {
+			return secret
+		}
+	}
+	auth := strings.TrimSpace(c.GetHeader("Authorization"))
+	for _, prefix := range []string{"Bearer ", "Token "} {
+		if strings.HasPrefix(auth, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(auth, prefix))
+		}
+	}
+	if auth != "" {
+		return auth
+	}
+	for _, key := range []string{"access_token", "token", "secret"} {
+		if secret := strings.TrimSpace(c.Query(key)); secret != "" {
+			return secret
+		}
+	}
+	return ""
 }
 
 func (h *ChannelHandler) ExternalConversations(c *gin.Context) {

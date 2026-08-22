@@ -58,21 +58,36 @@ func (s *Service) SendOutboxMessage(ctx context.Context, userID, outboxID string
 		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
 		return store.ChannelOutboxMessage{}, err
 	}
-	if strings.TrimSpace(cfg.Endpoint) == "" {
-		err := errors.New("missing channel endpoint")
+	endpointConfig := connectionConfig{}
+	sendEndpoint, err := s.channels.FindEndpointByType(ctx, userID, connection.ID, "message_api")
+	if err != nil {
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, "missing message_api endpoint")
+		return store.ChannelOutboxMessage{}, err
+	}
+	endpointConfig, err = s.decryptConfig(sendEndpoint.EncryptedConfig)
+	if err != nil {
+		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
+		return store.ChannelOutboxMessage{}, err
+	}
+	if strings.TrimSpace(sendEndpoint.URL) == "" {
+		err := errors.New("missing channel message_api endpoint")
 		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
 		return store.ChannelOutboxMessage{}, err
 	}
 
-	endpoint := strings.TrimRight(cfg.Endpoint, "/") + "/send_msg"
+	endpoint := strings.TrimRight(sendEndpoint.URL, "/") + "/send_msg"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(message.Payload))
 	if err != nil {
 		_, _ = s.channels.MarkOutboxFailed(ctx, userID, outboxID, err.Error())
 		return store.ChannelOutboxMessage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if strings.TrimSpace(cfg.AccessToken) != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.AccessToken)
+	token := strings.TrimSpace(endpointConfig.AccessToken)
+	if token == "" {
+		token = strings.TrimSpace(cfg.AccessToken)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {

@@ -74,7 +74,7 @@ Provider 保存平台级能力：
 用户 B 的飞书机器人
 ```
 
-敏感配置写入 `encrypted_config`，例如 token、webhook secret、NapCat endpoint。
+URL 类配置写入 `channel_connection_endpoints` 子表，避免为 NapCat、微信、Discord、飞书等不同平台不断给 `channel_connections` 主表加列。每条 endpoint 描述一个可访问端点，例如 `message_api`、`event_stream`、`webhook_callback`、`bot_gateway`。敏感配置写入 endpoint 或 connection 的 `encrypted_config`，例如 access token、webhook secret 和其它凭证。
 
 ### 3.3 External Conversation
 
@@ -254,7 +254,7 @@ NapCatQQ MCP Server
 第一版只做 NapCatQQ：
 
 1. `channel_provider_definitions` 内置 NapCatQQ。
-2. Web 设置页允许用户配置 NapCat endpoint、access token、secret。
+2. Web 设置页允许用户配置 NapCat HTTP API URL、HTTP SSE URL、FreeDinnerAgent webhook callback URL、access token 和 webhook secret。
 3. 支持 QQ 私聊触发 Agent。
 4. 支持 QQ 群聊 @Agent 触发。
 5. 回复先走文本消息。

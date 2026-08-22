@@ -56,6 +56,11 @@ type ConnectionFormState = {
   display_name: string;
   external_account_id: string;
   external_account_name: string;
+  message_api_url: string;
+  event_stream_url: string;
+  webhook_callback_url: string;
+  access_token: string;
+  webhook_secret: string;
   config: string;
 };
 
@@ -76,8 +81,12 @@ const defaultConnectionForm: ConnectionFormState = {
   display_name: "NapCatQQ",
   external_account_id: "",
   external_account_name: "",
-  config:
-    '{\n  "onebot_http_endpoint": "http://localhost:3000",\n  "webhook_secret": "change-me",\n  "bot_qq": ""\n}'
+  message_api_url: "http://127.0.0.1:3000",
+  event_stream_url: "http://127.0.0.1:3000/sse",
+  webhook_callback_url: "http://127.0.0.1:8080/api/v1/channels/<connection_id>/webhook",
+  access_token: "",
+  webhook_secret: "",
+  config: "{\n}"
 };
 
 const defaultPolicyForm: PolicyFormState = {
@@ -175,7 +184,13 @@ export function ChannelsPage() {
         display_name: connectionForm.display_name.trim(),
         external_account_id: connectionForm.external_account_id.trim() || null,
         external_account_name: connectionForm.external_account_name.trim() || null,
-        config
+        endpoints: buildNapCatEndpoints(connectionForm),
+        config: {
+          ...config,
+          access_token: connectionForm.access_token.trim(),
+          webhook_secret: connectionForm.webhook_secret.trim(),
+          bot_qq: connectionForm.external_account_id.trim()
+        }
       },
       {
         onSuccess: (connection) => {
@@ -471,9 +486,45 @@ function ConnectionForm({
           placeholder={t("channels.connection.externalAccountName")}
           value={form.external_account_name}
         />
+        <Input
+          onChange={(event) =>
+            onChange({ ...form, message_api_url: event.target.value })
+          }
+          placeholder={t("channels.connection.messageApiUrl")}
+          value={form.message_api_url}
+        />
+        <Input
+          onChange={(event) =>
+            onChange({ ...form, event_stream_url: event.target.value })
+          }
+          placeholder={t("channels.connection.eventStreamUrl")}
+          value={form.event_stream_url}
+        />
+        <Input
+          onChange={(event) =>
+            onChange({ ...form, webhook_callback_url: event.target.value })
+          }
+          placeholder={t("channels.connection.webhookCallbackUrl")}
+          value={form.webhook_callback_url}
+        />
+        <Input
+          onChange={(event) => onChange({ ...form, access_token: event.target.value })}
+          placeholder={t("channels.connection.accessToken")}
+          type="password"
+          value={form.access_token}
+        />
+        <Input
+          onChange={(event) =>
+            onChange({ ...form, webhook_secret: event.target.value })
+          }
+          placeholder={t("channels.connection.webhookSecret")}
+          type="password"
+          value={form.webhook_secret}
+        />
         <Textarea
-          className="min-h-36 font-mono text-xs"
+          className="min-h-24 font-mono text-xs"
           onChange={(event) => onChange({ ...form, config: event.target.value })}
+          placeholder={t("channels.connection.advancedConfig")}
           value={form.config}
         />
         <Button disabled={loading || providers.length === 0} type="submit">
@@ -573,6 +624,28 @@ function ConnectionHeader({
           label={t("channels.connection.lastEventAt")}
           value={formatOptionalDateTime(connection.last_event_at)}
         />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {connection.endpoints.length === 0 ? (
+          <p className="text-sm text-ink-500">{t("channels.connection.noEndpoints")}</p>
+        ) : (
+          connection.endpoints.map((endpoint) => (
+            <div className="rounded-md border border-ink-100 p-3" key={endpoint.id}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium text-ink-900">
+                  {endpoint.display_name}
+                </div>
+                <Badge>{endpoint.endpoint_type}</Badge>
+              </div>
+              <div className="mt-2 break-all text-xs text-ink-500">{endpoint.url}</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-ink-500">
+                <span>{endpoint.direction}</span>
+                <span>{endpoint.transport}</span>
+                {endpoint.has_secret && <span>{t("channels.connection.hasSecret")}</span>}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );
@@ -941,4 +1014,39 @@ function splitKeywords(value: string) {
 
 function formatOptionalDateTime(value?: string | null) {
   return value ? formatDateTime(value) : "-";
+}
+
+function buildNapCatEndpoints(form: ConnectionFormState) {
+  const accessToken = form.access_token.trim();
+  const webhookSecret = form.webhook_secret.trim();
+  const endpoints = [
+    {
+      endpoint_type: "message_api",
+      display_name: "NapCat HTTP API",
+      direction: "outbound",
+      transport: "http",
+      url: form.message_api_url.trim(),
+      config: accessToken ? { access_token: accessToken } : {},
+      metadata: { capability: "send_msg" }
+    },
+    {
+      endpoint_type: "event_stream",
+      display_name: "NapCat HTTP SSE",
+      direction: "inbound",
+      transport: "http_sse",
+      url: form.event_stream_url.trim(),
+      config: accessToken ? { access_token: accessToken } : {},
+      metadata: { capability: "listen_events" }
+    },
+    {
+      endpoint_type: "webhook_callback",
+      display_name: "FreeDinnerAgent Webhook",
+      direction: "inbound",
+      transport: "http",
+      url: form.webhook_callback_url.trim(),
+      config: webhookSecret ? { webhook_secret: webhookSecret } : {},
+      metadata: { capability: "receive_events" }
+    }
+  ];
+  return endpoints.filter((endpoint) => endpoint.url !== "");
 }

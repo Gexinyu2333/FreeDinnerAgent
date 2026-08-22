@@ -55,8 +55,5 @@ func (OneBotAdapter) BuildSendPayload(ctx context.Context, msg OutboxMessage) (j
 }
 
 func (OneBotAdapter) HealthCheck(ctx context.Context, conn store.ChannelConnection, cfg connectionConfig) (HealthStatus, error) {
-	if cfg.Endpoint == "" {
-		return HealthStatus{Status: "unhealthy", Message: "missing endpoint"}, nil
-	}
-	return HealthStatus{Status: "unknown", Message: "network health check is not enabled in MVP"}, nil
+	return HealthStatus{Status: "unknown", Message: "endpoint health check is managed by channel_connection_endpoints"}, nil
 }
