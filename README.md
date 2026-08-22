@@ -17,7 +17,7 @@ FreeDinnerAgent 是一个面向个人场景的 AI 个人助理全栈 Web 应用�
 - 工具调用：Function Calling 的注册、路由与稳定性处理
 - Agent Loop：Bounded ReAct 推理、执行、观察与最终回复
 - 心跳任务：定时提醒、每日简报、每周回顾和跟进监控
-- 多渠道入口：当前以 NapCatQQ / OneBot 作为首个外部监听入口；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留通用抽象
+- 多渠道入口：当前以 NapCat / OneBot 作为首个外部监听入口；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留通用抽象
 - LLM 输出不稳定时的兜底、重试与降级机制
 - 用户数据隔离与隐私保护
 - 后台服务架构与接口设计
@@ -78,7 +78,7 @@ FreeDinnerAgent/
    - 信息检索
    - 心跳任务：每日简报、每周回顾、跟进监控、定时提醒
    - 能力市场：MCP、Skills、Tools、Knowledge Base 支持私有/公共和安装到个人 Agent
-   - 多渠道入口：先接入 NapCatQQ / OneBot；Channel Adapter 作为独立监听入口，不混入普通 Web Chat 新建对话
+   - 多渠道入口：先接入 NapCat / OneBot；Channel Adapter 作为独立监听入口，不混入普通 Web Chat 新建对话
    - 每个 Channel connection 默认有一个专用监听/主控会话，用于展示 inbound/outbox、运行日志、审批和人工介入记录
    - 微信、Telegram、Discord、飞书等具体 Adapter 与生产级 sandbox 强隔离项一样，归入高级项
    - 通过 Tool Registry / MCP tool sync 继续扩展更多工具
@@ -121,7 +121,7 @@ OpenAI / OpenAI-compatible 网关的 API Key 不作为全局环境变量配置�
 
 ## 本地运行方式
 
-当前仓库已完成后端主体实现和数据库初始化脚本。按以下步骤可以运行后端，前端仍处于待初始化阶段：
+当前仓库已完成后端主体实现、React 前端 MVP 和数据库初始化脚本。按以下步骤可以运行本地开发环境：
 
 1. 安装 PostgreSQL 与 pgvector
 
@@ -176,8 +176,6 @@ npm install
 npm run dev
 ```
 
-当前 `frontend/` 还没有 React/Vite 工程文件，这一步是前端初始化后的运行方式；现阶段可先用 curl 或 GoLand 运行后端接口。
-
 5. 浏览器访问
 
 ```text
@@ -229,7 +227,23 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 - 任务管理和心跳任务：每日简报、每周回顾、跟进监控模板，支持创建、查看、更新、暂停、恢复、删除、立即运行、运行记录和后台到期扫描 worker
 - Tool Registry / Tool Router / Tool Executor，内置任务、记忆、知识库和 Workspace CLI 工具；MCP metadata tool sync 和 HTTP MCP bridge `tools/call` 执行
 - 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork 和规则安全扫描
-- NapCatQQ / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，outbox 审批、显式发送和后台 sender worker
+- NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环
 - Workspace 本地目录 MVP：启用、状态、文件读写、目录列表、受限 CLI 执行和审计日志
 
-当前主要未完成的是 React 前端工程。高级项包括多平台具体 Adapter、生产级 sandbox 强隔离、MCP stdio 进程生命周期、多模型 Shadow Validator、真实附件下载/发送和 LLM/embedding Curator。
+当前主要未完成的是前端全量页面细化和生产部署脚本。高级项包括多平台具体 Adapter、生产级 sandbox 强隔离、MCP stdio 进程生命周期、多模型 Shadow Validator、真实附件下载/发送和 LLM/embedding Curator。
+
+## NapCat 本机调试
+
+NapCat 部署在云服务器、FreeDinnerAgent 后端运行在本机时，可以用 SSH 反向隧道把云服务器本机端口转发到 Mac：
+
+```bash
+ssh -v -N -o ExitOnForwardFailure=yes -R 18080:127.0.0.1:8080 root@<napcat-server-ip>
+```
+
+NapCat HTTP Client URL 填：
+
+```text
+http://127.0.0.1:18080/api/v1/channels/<connection_id>/webhook?token=<webhook_secret>
+```
+
+NapCat HTTP SSE Server 建议监听 `0.0.0.0:3000`，FreeDinnerAgent 的 `message_api` endpoint 指向 `http://<napcat-server-ip>:3000`。详细说明见 [backend/NAPCAT.md](backend/NAPCAT.md)。

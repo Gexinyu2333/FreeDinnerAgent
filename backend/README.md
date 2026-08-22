@@ -15,7 +15,7 @@
 - `internal/app`：组合根，负责依赖组装、内置能力同步和后台 worker 启动
 - `internal/api`：HTTP handler、middleware、统一响应和路由注册
 - `internal/agent`：Agent 编排、上下文管理、工具调用决策
-- `internal/channel`：Channel Adapter 抽象、NapCatQQ / OneBot webhook、outbox 和 sender worker
+- `internal/channel`：Channel Adapter 抽象、NapCat / OneBot webhook、outbox 和 sender worker
 - `internal/contextmgr`：上下文拼装、token 阈值、摘要压缩和上下文体检
 - `internal/knowledge`：知识库文档切片、embedding 和检索
 - `internal/llm`：OpenAI-compatible LLM 客户端、聊天服务和 Agent Loop 入口
@@ -299,27 +299,38 @@ Channel Adapter 和普通 Web Chat 的触发方式不同：
 - Channel Adapter 是监听入口，外部 QQ 私聊、群聊 @ 或关键字命中后，由 webhook 事件触发 Agent Loop。
 - 前端建议单独做 Channels 页面管理连接、策略、inbox、outbox 和审批；不要把 Channel connection 当成普通“新建对话”入口。
 - 每个 `channel_connection` 默认对应一个专用监听/主控会话；外部私聊、群聊等 scope 通过 `external_conversations` 映射到本地 conversation，并在 UI 上归属该 Channel connection。
-- 微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留抽象；当前可运行验证入口是 NapCatQQ / OneBot。
+- 微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留抽象；当前可运行验证入口是 NapCat / OneBot。
 - approved outbox 可以通过显式接口发送，也可以由后台 sender worker 自动发送。
 
-创建 NapCatQQ 渠道连接：
+创建 NapCat / OneBot 渠道连接：
 
 ```bash
 NAPCAT_PROVIDER_ID="<channel-providers 里 name=napcatqq 的 id>"
 curl -sS -X POST http://localhost:8080/api/v1/me/channel-connections \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider_id":"'"$NAPCAT_PROVIDER_ID"'","display_name":"本地 NapCatQQ","external_account_id":"你的机器人 QQ 号","external_account_name":"FreeDinnerBot","config":{"access_token":"napcat-token","webhook_secret":"hook-secret","bot_qq":"你的机器人 QQ 号"},"endpoints":[{"endpoint_type":"message_api","display_name":"NapCat HTTP API","direction":"outbound","transport":"http","url":"http://127.0.0.1:3000","config":{"access_token":"napcat-token"}},{"endpoint_type":"event_stream","display_name":"NapCat HTTP SSE","direction":"inbound","transport":"http_sse","url":"http://127.0.0.1:3000/sse","config":{"access_token":"napcat-token"}},{"endpoint_type":"webhook_callback","display_name":"FreeDinnerAgent Webhook","direction":"inbound","transport":"http","url":"http://127.0.0.1:8080/api/v1/channels/<connection_id>/webhook","config":{"webhook_secret":"hook-secret"}}]}'
+  -d '{"provider_id":"'"$NAPCAT_PROVIDER_ID"'","display_name":"本地 NapCat","external_account_id":"你的机器人 QQ 号","external_account_name":"FreeDinnerBot","config":{"access_token":"napcat-token","webhook_secret":"hook-secret","bot_qq":"你的机器人 QQ 号"},"endpoints":[{"endpoint_type":"message_api","display_name":"NapCat HTTP API","direction":"outbound","transport":"http","url":"http://127.0.0.1:3000","config":{"access_token":"napcat-token"}},{"endpoint_type":"event_stream","display_name":"NapCat HTTP SSE","direction":"inbound","transport":"http_sse","url":"http://127.0.0.1:3000/sse","config":{"access_token":"napcat-token"}},{"endpoint_type":"webhook_callback","display_name":"FreeDinnerAgent Webhook","direction":"inbound","transport":"http","url":"http://127.0.0.1:8080/api/v1/channels/<connection_id>/webhook?token=hook-secret","config":{"webhook_secret":"hook-secret"}}]}'
 ```
 
-NapCatQQ / OneBot Webhook 地址：
+NapCat / OneBot Webhook 地址：
 
 ```text
-POST http://localhost:8080/api/v1/channels/<connection_id>/webhook
-Header: X-FreeDinner-Webhook-Secret: hook-secret
+POST http://localhost:8080/api/v1/channels/<connection_id>/webhook?token=hook-secret
 ```
 
-NapCat 部署与 HTTP SSE 服务器、HTTP 客户端配置说明见 [NAPCATQQ.md](NAPCATQQ.md)。`message_api` / `event_stream` / `webhook_callback` 的 URL 只要求被对应服务进程访问到，具体使用公网、内网、localhost 或隧道由部署方式决定。
+Webhook 也支持从 `X-FreeDinner-Webhook-Secret`、`X-Access-Token`、`X-Token` 和 `Authorization` 读取 secret；但实际 NapCat HTTP Client 的 Token 字段不一定按预期 header 传递，本地调试建议优先使用 `?token=`。NapCat 部署与 HTTP SSE 服务器、HTTP 客户端配置说明见 [NAPCAT.md](NAPCAT.md)。`message_api` / `event_stream` / `webhook_callback` 的 URL 只要求被对应服务进程访问到，具体使用公网、内网、localhost 或隧道由部署方式决定。
+
+如果 NapCat 在云服务器、FreeDinnerAgent 后端在本机 Mac，可以使用 SSH 反向隧道：
+
+```bash
+ssh -v -N -o ExitOnForwardFailure=yes -R 18080:127.0.0.1:8080 root@<napcat-server-ip>
+```
+
+然后 NapCat HTTP Client URL 填：
+
+```text
+http://127.0.0.1:18080/api/v1/channels/<connection_id>/webhook?token=hook-secret
+```
 
 本地模拟一条 QQ 私聊消息：
 

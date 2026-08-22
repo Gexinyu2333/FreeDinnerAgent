@@ -859,7 +859,7 @@ POST /api/v1/me/channel-connections
 }
 ```
 
-URL 类字段写入通用的 `channel_connection_endpoints`，避免为 NapCat、微信、Discord、飞书等不同平台不断给主表加列。`config` 和 endpoint `config` 中的 token/secret 等敏感字段加密写入 `encrypted_config`。NapCat 的 HTTP SSE 服务器、HTTP 客户端配置方式见 `backend/NAPCATQQ.md`。
+URL 类字段写入通用的 `channel_connection_endpoints`，避免为 NapCat、微信、Discord、飞书等不同平台不断给主表加列。`config` 和 endpoint `config` 中的 token/secret 等敏感字段加密写入 `encrypted_config`。NapCat 的 HTTP SSE 服务器、HTTP 客户端配置方式见 `backend/NAPCAT.md`。
 
 ### 获取我的渠道连接
 
