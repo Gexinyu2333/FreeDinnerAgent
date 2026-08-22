@@ -28,24 +28,25 @@ func NewSettingsHandler(agentConfigs *store.AgentConfigStore, modelProviders *st
 }
 
 type updateAgentConfigRequest struct {
-	Name                  *string          `json:"name"`
-	SystemPrompt          *string          `json:"system_prompt"`
-	DefaultProviderID     **string         `json:"default_provider_id"`
-	Temperature           *float64         `json:"temperature"`
-	ThinkingEnabled       *bool            `json:"thinking_enabled"`
-	ThinkingEffort        *string          `json:"thinking_effort"`
-	ThinkingBudgetTokens  *int             `json:"thinking_budget_tokens"`
-	MaxContextTokens      *int             `json:"max_context_tokens"`
-	MaxLoopSteps          *int             `json:"max_loop_steps"`
-	LLMRetryLimit         *int             `json:"llm_retry_limit"`
-	FallbackPolicy        *json.RawMessage `json:"fallback_policy"`
-	MemoryEnabled         *bool            `json:"memory_enabled"`
-	ToolUseEnabled        *bool            `json:"tool_use_enabled"`
-	ToolApprovalPolicy    *string          `json:"tool_approval_policy"`
-	DreamingEnabled       *bool            `json:"dreaming_enabled"`
-	SemanticMemoryEnabled *bool            `json:"semantic_memory_enabled"`
-	EmbeddingEnabled      *bool            `json:"embedding_enabled"`
-	EmbeddingCostPolicy   *json.RawMessage `json:"embedding_cost_policy"`
+	Name                  *string                          `json:"name"`
+	SystemPrompt          *string                          `json:"system_prompt"`
+	DefaultProviderID     **string                         `json:"default_provider_id"`
+	Temperature           *float64                         `json:"temperature"`
+	ThinkingEnabled       *bool                            `json:"thinking_enabled"`
+	ThinkingEffort        *string                          `json:"thinking_effort"`
+	ThinkingBudgetTokens  *int                             `json:"thinking_budget_tokens"`
+	MaxContextTokens      *int                             `json:"max_context_tokens"`
+	MaxLoopSteps          *int                             `json:"max_loop_steps"`
+	LLMRetryLimit         *int                             `json:"llm_retry_limit"`
+	FallbackPolicy        *json.RawMessage                 `json:"fallback_policy"`
+	MemoryEnabled         *bool                            `json:"memory_enabled"`
+	ToolUseEnabled        *bool                            `json:"tool_use_enabled"`
+	ToolApprovalPolicy    *string                          `json:"tool_approval_policy"`
+	DreamingEnabled       *bool                            `json:"dreaming_enabled"`
+	SemanticMemoryEnabled *bool                            `json:"semantic_memory_enabled"`
+	EmbeddingEnabled      *bool                            `json:"embedding_enabled"`
+	EmbeddingCostPolicy   *json.RawMessage                 `json:"embedding_cost_policy"`
+	LLMFeatureSettings    *[]store.LLMFeatureSettingUpdate `json:"llm_feature_settings"`
 }
 
 func (h *SettingsHandler) GetAgentConfig(c *gin.Context) {
@@ -100,6 +101,7 @@ func (h *SettingsHandler) UpdateAgentConfig(c *gin.Context) {
 		SemanticMemoryEnabled: req.SemanticMemoryEnabled,
 		EmbeddingEnabled:      req.EmbeddingEnabled,
 		EmbeddingCostPolicy:   req.EmbeddingCostPolicy,
+		LLMFeatureSettings:    req.LLMFeatureSettings,
 	})
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update agent config")
@@ -325,6 +327,16 @@ func validateAgentConfigRequest(req updateAgentConfigRequest) error {
 		case "never", "sensitive_only", "always":
 		default:
 			return errors.New("tool_approval_policy must be never, sensitive_only or always")
+		}
+	}
+	if req.LLMFeatureSettings != nil {
+		for _, setting := range *req.LLMFeatureSettings {
+			if setting.FeatureKey == "" {
+				return errors.New("llm feature_key is required")
+			}
+			if setting.Temperature != nil && *setting.Temperature != nil && (**setting.Temperature < 0 || **setting.Temperature > 2) {
+				return errors.New("llm feature temperature must be between 0 and 2")
+			}
 		}
 	}
 	return nil

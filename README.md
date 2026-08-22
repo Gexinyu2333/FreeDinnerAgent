@@ -17,7 +17,7 @@ FreeDinnerAgent 是一个面向个人场景的 AI 个人助理全栈 Web 应用�
 - 工具调用：Function Calling 的注册、路由与稳定性处理
 - Agent Loop：Bounded ReAct 推理、执行、观察与最终回复
 - 心跳任务：定时提醒、每日简报、每周回顾和跟进监控
-- 多渠道入口：当前以 NapCatQQ / OneBot 作为首个外部监听入口；微信、Telegram、Discord、飞书等具体 Adapter 强制暂缓，只保留通用抽象
+- 多渠道入口：当前以 NapCatQQ / OneBot 作为首个外部监听入口；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留通用抽象
 - LLM 输出不稳定时的兜底、重试与降级机制
 - 用户数据隔离与隐私保护
 - 后台服务架构与接口设计
@@ -55,7 +55,7 @@ FreeDinnerAgent/
 
 2. AI 对话
    - Web Chat 是用户主动发起的对话，只有用户在当前会话输入 query 时才触发 Agent Loop
-   - 用户可配置自己的 OpenAI 或 Anthropic API Key
+   - 用户可配置自己的 OpenAI / OpenAI-compatible API Key；Anthropic provider 字段已预留，聊天调用层归入高级项
    - 后端按当前用户的默认 Agent 配置和模型供应商配置调用 LLM
    - 后端组装上下文、相关记忆和可用工具
    - 用户可手动整理当前对话，将早期轮次压缩成摘要
@@ -69,7 +69,7 @@ FreeDinnerAgent/
    - Episodic Memory：保存完整交互轨迹、工具调用和成功失败状态
    - Procedural Memory：沉淀可复用 ReAct 技能流程，支持私有技能和公共技能
    - Semantic Memory：保存外部文档切片，支持私有知识库和公共知识库；数据库支持 pgvector，用户可按成本选择是否开启 embedding 向量检索
-   - Dreaming：后台离线整理记忆，合并重复内容、归档低价值历史、提炼技能候选
+   - Dreaming：后台离线整理记忆，生成可查看、可应用、可拒绝的记忆建议，并可沉淀画像或私有 Skill
 
 4. 工具调用
    - 日程提醒
@@ -80,8 +80,8 @@ FreeDinnerAgent/
    - 能力市场：MCP、Skills、Tools、Knowledge Base 支持私有/公共和安装到个人 Agent
    - 多渠道入口：先接入 NapCatQQ / OneBot；Channel Adapter 作为独立监听入口，不混入普通 Web Chat 新建对话
    - 每个 Channel connection 默认有一个专用监听/主控会话，用于展示 inbound/outbox、运行日志、审批和人工介入记录
-   - 微信、Telegram、Discord、飞书等具体 Adapter 与生产级 sandbox 强隔离项一样，当前 MVP 强制暂缓实现
-   - 后续可继续扩展更多工具
+   - 微信、Telegram、Discord、飞书等具体 Adapter 与生产级 sandbox 强隔离项一样，归入高级项
+   - 通过 Tool Registry / MCP tool sync 继续扩展更多工具
 
 5. 稳定性处理
    - 工具参数校验
@@ -100,7 +100,7 @@ FreeDinnerAgent/
 - Go 1.26+
 - PostgreSQL 17+ 推荐，macOS Homebrew 环境下 pgvector 默认适配 PostgreSQL 17/18
 - pgvector，用于 Semantic Memory / RAG 向量检索
-- 用户自备 OpenAI 或 Anthropic API Key
+- 用户自备 OpenAI / OpenAI-compatible API Key；Anthropic 配置可保存但当前聊天生成尚未接入
 
 后端需要配置环境变量：
 
@@ -110,13 +110,18 @@ SERVER_PORT=8080
 DATABASE_URL=postgres://freedinner:freedinner@localhost:5432/freedinner_agent?sslmode=disable
 JWT_SECRET=change_me_to_a_long_random_string
 API_KEY_ENCRYPTION_KEY=32_byte_base64_or_hex_key
+SCHEDULER_WORKER_ENABLED=true
+SCHEDULER_POLL_INTERVAL=1m
+CHANNEL_SENDER_ENABLED=true
+CHANNEL_SENDER_INTERVAL=15s
+CHANNEL_SENDER_BATCH_SIZE=20
 ```
 
-OpenAI、Anthropic 的 API Key 不作为全局环境变量配置，而是在用户登录后进入设置页，由用户自行添加并保存到自己的模型供应商配置中。后端加密存储 API Key，接口不返回明文。
+OpenAI / OpenAI-compatible 网关的 API Key 不作为全局环境变量配置，而是在用户登录后进入设置页，由用户自行添加并保存到自己的模型供应商配置中。后端加密存储 API Key，接口不返回明文。Anthropic provider 字段已预留，可保存配置，但当前聊天生成只会调用 `provider = openai` 的 OpenAI-compatible 接口。
 
 ## 本地运行方式
 
-当前仓库先完成项目结构与设计文档。完整代码实现后，计划按以下步骤运行：
+当前仓库已完成后端主体实现和数据库初始化脚本。按以下步骤可以运行后端，前端仍处于待初始化阶段：
 
 1. 安装 PostgreSQL 与 pgvector
 
@@ -171,11 +176,31 @@ npm install
 npm run dev
 ```
 
+当前 `frontend/` 还没有 React/Vite 工程文件，这一步是前端初始化后的运行方式；现阶段可先用 curl 或 GoLand 运行后端接口。
+
 5. 浏览器访问
 
 ```text
 http://localhost:5173
 ```
+
+## 测试与质量门禁
+
+后端结构化重构后，建议每次收口前至少执行：
+
+```bash
+git diff --check
+cd backend
+go test ./...
+```
+
+当前后端核心依赖方向保持为：
+
+```text
+cmd/server -> internal/app -> internal/api + domain services -> internal/store
+```
+
+`internal/api` 只负责 HTTP 入参、鉴权用户、调用 service 和返回统一响应；`internal/store` 只负责数据库访问；Agent Loop、Memory、Tool、Channel、Scheduler、Workspace 等业务规则分别留在对应 domain service 包中。
 
 ## 设计文档
 
@@ -192,19 +217,19 @@ http://localhost:5173
 
 ## 当前阶段
 
-当前版本已完成项目目录规划、Hermes-like 分层记忆数据库草案和系统设计说明。下一阶段将初始化 React 前端和 Go 后端工程，并实现最小可运行版本：
+当前版本已完成总体目录、数据库 schema、Go 后端主体和设计文档。后端已经具备以下可运行能力：
 
-- 用户发送消息
-- 用户名密码登录
-- 用户配置自己的 OpenAI 或 Anthropic API Key
-- 查看自己的 Agent 配置和对话记录
-- 后端生成 AI 回复
-- 保存会话消息
-- 创建和查看心跳任务：每日简报、每周回顾、跟进监控
-- 支持心跳任务立即运行并写入运行记录
-- 接入 NapCatQQ 私聊和群聊 @ 触发，Channel 入口与普通 Web Chat 入口分离
-- 微信、Telegram、Discord、飞书等具体 Adapter 暂缓实现，只保留通用 Channel Adapter 抽象
-- 写入和检索 Profile Memory
-- 保存 Episodic Memory
-- 支持 Semantic Memory 文档切片
-- 通过 `memory_type_definitions` 扩展新的画像记忆类型
+- 用户注册、用户名密码登录、JWT 鉴权和当前用户接口
+- 用户级模型供应商配置，API Key 加密保存；聊天生成当前支持 OpenAI / OpenAI-compatible provider，Anthropic provider 先作为配置预留
+- 用户 Agent 配置，包括 temperature、thinking、工具审批策略、embedding 成本开关和额外 LLM 功能表 `agent_llm_feature_settings`
+- 会话创建、消息保存、上下文构建、自动/手动对话压缩和 Agent Turn 执行记录
+- Bounded ReAct Agent Loop：结构化 action、工具路由、工具执行、memory search、observation 回填、repair/retry/fallback、answer contract 和 dry-run
+- Profile / Working / Episodic / Procedural / Semantic Memory 的核心表结构和后端读写检索；Semantic Memory 支持文档切片、关键词检索、embedding 开关和 pgvector 召回
+- Dreaming 规则版执行器和 insight 列表、应用、拒绝接口
+- 任务管理和心跳任务：每日简报、每周回顾、跟进监控模板，支持创建、查看、更新、暂停、恢复、删除、立即运行、运行记录和后台到期扫描 worker
+- Tool Registry / Tool Router / Tool Executor，内置任务、记忆、知识库和 Workspace CLI 工具；MCP metadata tool sync 和 HTTP MCP bridge `tools/call` 执行
+- 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork 和规则安全扫描
+- NapCatQQ / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，outbox 审批、显式发送和后台 sender worker
+- Workspace 本地目录 MVP：启用、状态、文件读写、目录列表、受限 CLI 执行和审计日志
+
+当前主要未完成的是 React 前端工程。高级项包括多平台具体 Adapter、生产级 sandbox 强隔离、MCP stdio 进程生命周期、多模型 Shadow Validator、真实附件下载/发送和 LLM/embedding Curator。

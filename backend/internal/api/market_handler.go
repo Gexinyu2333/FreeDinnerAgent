@@ -55,6 +55,12 @@ type previewPromptTemplateRequest struct {
 	Override  *string           `json:"override"`
 }
 
+type forkPromptTemplateRequest struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
+
 type rateMarketplaceItemRequest struct {
 	Rating  int     `json:"rating" binding:"required"`
 	Comment *string `json:"comment"`
@@ -228,6 +234,31 @@ func (h *MarketHandler) PreviewPromptTemplate(c *gin.Context) {
 	})
 	if err != nil {
 		writeMarketError(c, err, "failed to preview system prompt template")
+		return
+	}
+	OK(c, result)
+}
+
+func (h *MarketHandler) ForkPromptTemplate(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	var req forkPromptTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	result, err := h.market.ForkPromptTemplate(c.Request.Context(), marketsvc.ForkPromptTemplateInput{
+		UserID:      userID,
+		VersionID:   c.Param("version_id"),
+		Name:        req.Name,
+		DisplayName: req.DisplayName,
+		Description: req.Description,
+	})
+	if err != nil {
+		writeMarketError(c, err, "failed to fork system prompt template")
 		return
 	}
 	OK(c, result)

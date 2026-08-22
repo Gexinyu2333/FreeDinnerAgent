@@ -1,6 +1,10 @@
 package tool
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"freedinner/backend/internal/store"
@@ -98,5 +102,36 @@ func TestResolveApprovalRejectsInvalidStatus(t *testing.T) {
 	service := &Service{}
 	if _, err := service.ResolveApproval(nil, "user-1", "approval-1", "pending"); err == nil {
 		t.Fatal("expected invalid approval status error")
+	}
+}
+
+func TestExecuteMCPToolCallsHTTPBridge(t *testing.T) {
+	var method string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Method string `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		method = payload.Method
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{"ok":true}}`))
+	}))
+	defer server.Close()
+
+	metadata, _ := json.Marshal(map[string]any{
+		"endpoint":    server.URL,
+		"handler_ref": "calendar.list_events",
+	})
+	service := &Service{httpClient: server.Client()}
+	result, status, _, errMessage := service.executeMCPTool(context.Background(), store.ToolDefinition{
+		Name:        "mcp_calendar_list_events",
+		HandlerType: "mcp",
+		HandlerRef:  "calendar.list_events",
+		Metadata:    metadata,
+	}, ExecuteInput{ToolName: "mcp_calendar_list_events", Arguments: json.RawMessage(`{"limit":3}`)})
+	if status != "success" || errMessage != nil {
+		t.Fatalf("expected success, status=%s error=%v result=%s", status, errMessage, result)
+	}
+	if method != "tools/call" {
+		t.Fatalf("expected tools/call, got %q", method)
 	}
 }

@@ -2,9 +2,7 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"strings"
 
 	"freedinner/backend/internal/agent"
 	"freedinner/backend/internal/contextmgr"
@@ -128,7 +126,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, conte
 	if err != nil {
 		return store.SendMessageResult{}, err
 	}
-	s.maybeAutoCompress(ctx, userID, conversationID, messages, contextResult.Report)
+	s.maybeAutoCompress(ctx, userID, conversationID, messages, contextResult.Report, cfg, provider, apiKey)
 	input := toChatMessages(contextResult.Input)
 	route := agent.RouteResult{}
 	if cfg.ToolUseEnabled && s.tools != nil {
@@ -219,7 +217,7 @@ func (s *Service) RespondToExistingMessage(ctx context.Context, userID, conversa
 	if err != nil {
 		return store.SendMessageResult{}, err
 	}
-	s.maybeAutoCompress(ctx, userID, conversationID, messages, contextResult.Report)
+	s.maybeAutoCompress(ctx, userID, conversationID, messages, contextResult.Report, cfg, provider, apiKey)
 	input := toChatMessages(contextResult.Input)
 	route := agent.RouteResult{}
 	if cfg.ToolUseEnabled && s.tools != nil {
@@ -250,155 +248,4 @@ func (s *Service) RespondToExistingMessage(ctx context.Context, userID, conversa
 		return result, err
 	}
 	return result, nil
-}
-
-func (s *Service) createFailedTurn(ctx context.Context, userID, conversationID string, userMessageID *string, agentConfigID *string, providerID *string, code, message string) (store.AgentTurn, error) {
-	turn, err := s.harness.CreateTurn(ctx, store.AgentTurnCreate{
-		UserID:         userID,
-		ConversationID: conversationID,
-		UserMessageID:  userMessageID,
-		AgentConfigID:  agentConfigID,
-		ProviderID:     providerID,
-	})
-	if err != nil {
-		return store.AgentTurn{}, err
-	}
-	_, _ = s.harness.AddEvent(ctx, event(turn, "turn_started", map[string]any{
-		"mode": "minimal_llm",
-	}))
-	_, _ = s.harness.StartTurn(ctx, turn.ID, userID, conversationID)
-	_, _ = s.harness.AddEvent(ctx, event(turn, "turn_failed", map[string]any{
-		"code":  code,
-		"error": message,
-	}))
-	return s.harness.FinishTurn(ctx, turn.ID, userID, conversationID, "failed", nil, &message)
-}
-
-func event(turn store.AgentTurn, eventType string, payload map[string]any) store.AgentEventCreate {
-	rawPayload, _ := json.Marshal(payload)
-	return store.AgentEventCreate{
-		TurnID:         turn.ID,
-		UserID:         turn.UserID,
-		ConversationID: turn.ConversationID,
-		EventType:      eventType,
-		Payload:        rawPayload,
-	}
-}
-
-func (s *Service) buildContext(ctx context.Context, userID, conversationID string, messageID *string, agentConfigID *string, providerID *string, cfg store.AgentConfig, messages []store.Message) (contextmgr.BuildResult, error) {
-	systemPrompt := s.resolveSystemPrompt(ctx, userID, cfg)
-	if s.contexts == nil {
-		return contextmgr.BuildResult{
-			Input:  toPromptMessages(buildOpenAIInput(systemPrompt, messages)),
-			Report: contextmgr.HealthReport{MaxContextTokens: cfg.MaxContextTokens},
-		}, nil
-	}
-	return s.contexts.Build(ctx, contextmgr.BuildInput{
-		UserID:          userID,
-		ConversationID:  conversationID,
-		MessageID:       messageID,
-		AgentConfigID:   agentConfigID,
-		ProviderID:      providerID,
-		SystemPrompt:    systemPrompt,
-		MaxTokens:       cfg.MaxContextTokens,
-		RecentTurnLimit: contextmgr.DefaultRecentTurnLimit,
-		Messages:        messages,
-		MemoryChunks:    s.buildContextMemory(ctx, userID, conversationID, messageID, cfg, latestUserQuery(messages)),
-		SkillSections:   s.buildContextSkills(ctx, userID, cfg, latestUserQuery(messages)),
-	})
-}
-
-func (s *Service) resolveSystemPrompt(ctx context.Context, userID string, cfg store.AgentConfig) string {
-	if s.market == nil {
-		return cfg.SystemPrompt
-	}
-	version, err := s.market.ResolveAgentSystemPrompt(ctx, userID, cfg.ID)
-	if err != nil || version == nil || version.Content == "" {
-		return cfg.SystemPrompt
-	}
-	return version.Content
-}
-
-func toChatMessages(messages []contextmgr.PromptMessage) []ChatMessage {
-	result := make([]ChatMessage, 0, len(messages))
-	for _, message := range messages {
-		result = append(result, ChatMessage{Role: message.Role, Content: message.Content})
-	}
-	return result
-}
-
-func toPromptMessages(messages []ChatMessage) []contextmgr.PromptMessage {
-	result := make([]contextmgr.PromptMessage, 0, len(messages))
-	for _, message := range messages {
-		result = append(result, contextmgr.PromptMessage{Role: message.Role, Content: message.Content})
-	}
-	return result
-}
-
-func buildOpenAIInput(systemPrompt string, messages []store.Message) []ChatMessage {
-	input := []ChatMessage{
-		{Role: "system", Content: systemPrompt},
-	}
-
-	start := 0
-	if len(messages) > 20 {
-		start = len(messages) - 20
-	}
-
-	for _, msg := range messages[start:] {
-		if msg.Role != "user" && msg.Role != "assistant" && msg.Role != "system" {
-			continue
-		}
-		input = append(input, ChatMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-	return input
-}
-
-func latestUserQuery(messages []store.Message) string {
-	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "user" {
-			return messages[index].Content
-		}
-	}
-	return ""
-}
-
-func (s *Service) maybeAutoCompress(ctx context.Context, userID, conversationID string, messages []store.Message, report contextmgr.HealthReport) {
-	if s.compressor == nil || report.CompressionStrategy == nil {
-		return
-	}
-	if len(messages) < contextmgr.DefaultRecentTurnLimit*2 {
-		return
-	}
-	_, _ = s.compressor.ManualCompress(ctx, contextmgr.ManualCompressInput{
-		UserID:            userID,
-		ConversationID:    conversationID,
-		Messages:          messages,
-		KeepRecentTurns:   contextmgr.DefaultRecentTurnLimit,
-		TargetSummaryType: "turn_window",
-	})
-}
-
-func (s *Service) buildContextSkills(ctx context.Context, userID string, cfg store.AgentConfig, query string) []contextmgr.SkillSection {
-	if s.memories == nil || strings.TrimSpace(query) == "" {
-		return nil
-	}
-	disclosures, err := s.memories.MatchSkills(ctx, userID, query, "light", 5)
-	if err != nil {
-		return nil
-	}
-	sections := make([]contextmgr.SkillSection, 0, len(disclosures))
-	for _, disclosure := range disclosures {
-		sections = append(sections, contextmgr.SkillSection{
-			RefID:      disclosure.VersionID,
-			Title:      disclosure.SkillName + " / " + disclosure.Title,
-			Content:    disclosure.Content,
-			TokenCount: disclosure.TokenCount,
-			LoadMode:   disclosure.DisclosureLevel,
-		})
-	}
-	return sections
 }

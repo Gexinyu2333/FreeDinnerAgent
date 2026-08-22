@@ -72,6 +72,27 @@ CREATE TABLE IF NOT EXISTS user_agent_configs (
     UNIQUE (user_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS agent_llm_feature_settings (
+    id UUID PRIMARY KEY,
+    agent_config_id UUID NOT NULL REFERENCES user_agent_configs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    feature_key VARCHAR(80) NOT NULL CHECK (feature_key IN (
+        'auto_compression_llm',
+        'dreaming_llm',
+        'curator_llm',
+        'shadow_validator_llm',
+        'skill_router_llm'
+    )),
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    provider_id UUID REFERENCES user_model_providers(id) ON DELETE SET NULL,
+    model_override VARCHAR(120),
+    temperature NUMERIC(3, 2) CHECK (temperature IS NULL OR (temperature >= 0 AND temperature <= 2)),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (agent_config_id, feature_key)
+);
+
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1007,6 +1028,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_model_providers_one_default
     ON user_model_providers(user_id)
     WHERE is_default = TRUE AND status = 'active';
 CREATE INDEX IF NOT EXISTS idx_user_agent_configs_user ON user_agent_configs(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_llm_feature_settings_agent ON agent_llm_feature_settings(agent_config_id, feature_key);
+CREATE INDEX IF NOT EXISTS idx_agent_llm_feature_settings_provider ON agent_llm_feature_settings(provider_id) WHERE provider_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_anchor ON messages(conversation_id, is_anchor);
 CREATE INDEX IF NOT EXISTS idx_conversation_summaries_conversation_status ON conversation_summaries(conversation_id, status);

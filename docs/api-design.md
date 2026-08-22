@@ -141,7 +141,23 @@ PATCH /api/v1/me/agent-config
     "mode": "manual",
     "max_monthly_tokens": 0,
     "embed_public_knowledge": false
-  }
+  },
+  "llm_feature_settings": [
+    {
+      "feature_key": "auto_compression_llm",
+      "enabled": true,
+      "provider_id": "cheap-openai-compatible-provider-id",
+      "model_override": "cheap-summary-model",
+      "temperature": 0.2
+    },
+    {
+      "feature_key": "dreaming_llm",
+      "enabled": false,
+      "provider_id": null,
+      "model_override": null,
+      "temperature": null
+    }
+  ]
 }
 ```
 
@@ -150,6 +166,18 @@ PATCH /api/v1/me/agent-config
 - `always`：所有工具调用都进入审批。
 - `sensitive_only`：默认值，仅敏感、破坏性或工具自身要求审批的调用进入审批。
 - `never`：所有工具调用直接执行，适合本地开发或完全信任的私有环境。
+
+`llm_feature_settings` 控制主聊天以外的额外模型调用，底层存储在 `agent_llm_feature_settings` 表，默认全部关闭以控制成本。
+
+每个 feature 支持：
+
+- `feature_key`：例如 `auto_compression_llm`、`dreaming_llm`、`curator_llm`。
+- `enabled`：是否启用这个额外 LLM 功能。
+- `provider_id`：可选；不填则使用当前用户默认 chat provider，填写后只能指向当前用户自己的 active OpenAI-compatible provider。
+- `model_override`：可选；用于让该 feature 使用不同于 provider 默认 chat model 的便宜模型。
+- `temperature`：可选；用于覆盖该 feature 的温度。
+
+以自动上下文压缩为例，开启后会优先尝试 LLM 摘要，失败再回退本地规则摘要。
 
 ### 获取我的模型供应商配置
 
@@ -190,11 +218,11 @@ POST /api/v1/me/model-providers
 
 ```json
 {
-  "provider": "anthropic",
-  "display_name": "Anthropic Claude",
-  "chat_base_url": null,
-  "chat_api_key": "sk-ant-...",
-  "default_chat_model": "claude-3-5-sonnet-latest",
+  "provider": "openai",
+  "display_name": "LongCat Chat",
+  "chat_base_url": "https://api.longcat.chat/openai/v1",
+  "chat_api_key": "ak_...",
+  "default_chat_model": "LongCat-2.0",
   "embedding_base_url": "https://api.openai.com/v1",
   "embedding_api_key": "sk-...",
   "default_embedding_model": null,
@@ -202,7 +230,7 @@ POST /api/v1/me/model-providers
 }
 ```
 
-配置说明：`chat_api_key/chat_base_url` 用于对话模型，`embedding_api_key/embedding_base_url` 用于向量化模型。Embedding 未开启时可以不传 embedding 相关字段；后端不会把 API Key 明文返回给前端。
+配置说明：`chat_api_key/chat_base_url` 用于对话模型，`embedding_api_key/embedding_base_url` 用于向量化模型。Embedding 未开启时可以不传 embedding 相关字段；后端不会把 API Key 明文返回给前端。当前聊天生成已接入 `provider = openai` 的 OpenAI / OpenAI-compatible 接口；`provider = anthropic` 可以保存配置，但调用层仍归入高级项。
 
 ### 更新模型供应商配置
 
@@ -285,6 +313,7 @@ POST /api/v1/conversations/{conversation_id}/compression-jobs
 ```
 
 该接口用于前端“整理当前对话”按钮。后端会保留最近 N 轮原文，将更早的消息压缩为 `conversation_summaries`，并通过 `conversation_compression_jobs` 记录状态。
+自动压缩会根据 `agent_llm_feature_settings.feature_key = 'auto_compression_llm'` 选择当前用户自己的 feature provider；未指定 `provider_id` 时使用默认 chat provider。如果模型调用失败，会回退到规则版摘要。
 
 ### 获取会话压缩任务状态
 
@@ -343,7 +372,7 @@ POST /api/v1/conversations/{conversation_id}/messages
   "data": null,
   "error": {
     "code": "MODEL_PROVIDER_REQUIRED",
-    "message": "请先在设置中配置 OpenAI 或 Anthropic API Key"
+    "message": "请先在设置中配置 OpenAI / OpenAI-compatible API Key"
   }
 }
 ```
@@ -513,6 +542,7 @@ follow_up_monitor
 ```
 
 `reminder`、`content_digest`、`social_assist` 作为任务类型已预留，模板后续扩展。
+服务启动后可按 `SCHEDULER_WORKER_ENABLED` 和 `SCHEDULER_POLL_INTERVAL` 启动进程内 worker，自动扫描到期任务；`run-now` 仍用于手动立即触发和调试。
 
 ### 创建心跳任务
 
@@ -742,7 +772,7 @@ GET /api/v1/tool-calls/{tool_call_id}
 POST /api/v1/tool-approval-requests/{approval_id}/approve
 ```
 
-批准会将 approval request 标记为 `approved`，并在对应 `tool_call_logs.approved_at` 写入时间。后续 Agent Harness 恢复机制会继续执行已批准工具。
+批准会将 approval request 标记为 `approved`，并在对应 `tool_call_logs.approved_at` 写入时间。当前 MVP 先完成审批状态和审计闭环；自动恢复同一个等待中的 Agent Turn 继续执行属于高级项。
 
 ### 拒绝工具调用
 
@@ -752,7 +782,7 @@ POST /api/v1/tool-approval-requests/{approval_id}/reject
 
 拒绝会将 approval request 标记为 `rejected`，并把对应 `tool_call_logs.status` 标记为 `cancelled`。
 
-工具涉及敏感或破坏性操作时，后端会先创建审批请求，并将 Agent Turn 标记为 `waiting_approval`。用户审批后，后端继续执行或取消该工具调用。
+工具涉及敏感或破坏性操作时，后端会先创建审批请求，并将 Agent Turn 标记为 `waiting_approval`。当前版本用户审批后会完成审批状态和审计记录；自动恢复同一个等待中的 Agent Turn 继续执行属于高级项。
 
 ## 11. 多渠道入口接口
 
@@ -836,9 +866,19 @@ PATCH /api/v1/me/channel-connections/{connection_id}/policies
   "allow_memory_write": true,
   "allow_tool_use": true,
   "require_approval_for_outbound": true,
-  "rate_limit_per_minute": 6
+  "rate_limit_per_minute": 6,
+  "rate_limit_policy": {
+    "rate_limits": [
+      {
+        "window_seconds": 600,
+        "max_triggers": 20
+      }
+    ]
+  }
 }
 ```
+
+`rate_limit_per_minute` 是兼容字段；`rate_limit_policy.rate_limits` 用于配置多窗口限频，例如 1 分钟 6 次、10 分钟 20 次。当前也支持用户级 `user_rate_limits` 和 `circuit_breaker` 熔断配置。
 
 ### Channel Webhook 入口
 
@@ -885,6 +925,7 @@ POST /api/v1/channel-outbox-messages/{outbox_id}/send
 ```
 
 发送已批准的 outbox 消息。当前 NapCatQQ/OneBot 适配会调用连接配置中的 `endpoint + /send_msg`，成功后回写 `status = sent` 和外部消息 ID，失败后回写 `status = failed` 与错误信息。
+服务启动后可按 `CHANNEL_SENDER_ENABLED`、`CHANNEL_SENDER_INTERVAL` 和 `CHANNEL_SENDER_BATCH_SIZE` 启动后台 sender worker，批量发送 approved outbox。OneBot 文本中的图片、文件、语音、视频和卡片 CQ 码会被归一化为附件摘要，避免保存原始敏感参数。
 
 ## 12. 能力市场接口
 
@@ -1011,6 +1052,26 @@ POST /api/v1/system-prompt-templates
 ```
 
 如果不传 `variables`，后端会从模板内容中的 `{variable}` 自动生成基础 string 变量定义。预览时会校验 required、number、boolean、enum 和 json 类型。
+创建模板时会做规则版安全扫描，拦截绕过审批、泄露 API Key、跨用户读取等危险提示词。
+
+### Fork 系统提示词模板版本
+
+```http
+POST /api/v1/system-prompt-template-versions/{version_id}/fork
+```
+
+请求：
+
+```json
+{
+  "name": "research_assistant_custom",
+  "display_name": "我的研究助理",
+  "visibility": "private",
+  "change_note": "基于公共模板调整为个人版本"
+}
+```
+
+公共模板版本可以 fork 为当前用户的私有模板。Fork 后的模板拥有独立版本，不会跟随原模板自动更新。
 
 ### 预览系统提示词模板
 
@@ -1119,7 +1180,33 @@ POST /api/v1/system-prompt-templates/preview
 
 该接口返回模板版本、变量定义、替换后的内容和粗略 token 数，用于前端确认。
 
-## 14. Workspace Sandbox 接口
+## 14. Dreaming Insight 接口
+
+### 获取 Dreaming 建议
+
+```http
+GET /api/v1/dreaming-insights?status=proposed&limit=20
+```
+
+返回当前用户的离线复盘建议，例如画像更新、技能候选、记忆合并或归档建议。
+
+### 应用 Dreaming 建议
+
+```http
+POST /api/v1/dreaming-insights/{insight_id}/apply
+```
+
+`profile_update` 会写入 Profile Memory，`skill_candidate` 可以沉淀为私有 Skill，其它复杂类型会创建 `memory_consolidation` curator job 等待后续处理。
+
+### 拒绝 Dreaming 建议
+
+```http
+POST /api/v1/dreaming-insights/{insight_id}/reject
+```
+
+拒绝后建议状态更新为 `rejected`，保留审计记录，不修改现有记忆。
+
+## 15. Workspace Sandbox 接口
 
 ### 获取我的 Workspace 状态
 

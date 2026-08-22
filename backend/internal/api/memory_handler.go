@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -167,6 +168,57 @@ func (h *MemoryHandler) Context(c *gin.Context) {
 		return
 	}
 	OK(c, result)
+}
+
+func (h *MemoryHandler) ListDreamingInsights(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	status := trimAPIString(queryStringPtr(c, "status"))
+	insights, err := h.memories.ListDreamingInsights(c.Request.Context(), userID, status, parseLimit(c.Query("limit")))
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list dreaming insights")
+		return
+	}
+	OK(c, insights)
+}
+
+func (h *MemoryHandler) ApplyDreamingInsight(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	result, err := h.manager.ApplyDreamingInsight(c.Request.Context(), userID, c.Param("insight_id"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "dreaming insight not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to apply dreaming insight")
+		return
+	}
+	OK(c, result)
+}
+
+func (h *MemoryHandler) RejectDreamingInsight(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	insight, err := h.manager.RejectDreamingInsight(c.Request.Context(), userID, c.Param("insight_id"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "dreaming insight not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to reject dreaming insight")
+		return
+	}
+	OK(c, insight)
 }
 
 func validateCreateProfileMemory(req createProfileMemoryRequest) error {

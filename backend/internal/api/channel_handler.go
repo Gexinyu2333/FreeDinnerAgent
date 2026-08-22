@@ -29,14 +29,15 @@ type createChannelConnectionRequest struct {
 }
 
 type upsertChannelPolicyRequest struct {
-	ScopeType                  string   `json:"scope_type" binding:"required"`
-	ExternalScopeID            *string  `json:"external_scope_id"`
-	Mode                       string   `json:"mode" binding:"required"`
-	TriggerKeywords            []string `json:"trigger_keywords"`
-	AllowMemoryWrite           *bool    `json:"allow_memory_write"`
-	AllowToolUse               *bool    `json:"allow_tool_use"`
-	RequireApprovalForOutbound *bool    `json:"require_approval_for_outbound"`
-	RateLimitPerMinute         *int     `json:"rate_limit_per_minute"`
+	ScopeType                  string          `json:"scope_type" binding:"required"`
+	ExternalScopeID            *string         `json:"external_scope_id"`
+	Mode                       string          `json:"mode" binding:"required"`
+	TriggerKeywords            []string        `json:"trigger_keywords"`
+	AllowMemoryWrite           *bool           `json:"allow_memory_write"`
+	AllowToolUse               *bool           `json:"allow_tool_use"`
+	RequireApprovalForOutbound *bool           `json:"require_approval_for_outbound"`
+	RateLimitPerMinute         *int            `json:"rate_limit_per_minute"`
+	RateLimitPolicy            json.RawMessage `json:"rate_limit_policy"`
 }
 
 func (h *ChannelHandler) Providers(c *gin.Context) {
@@ -126,6 +127,7 @@ func (h *ChannelHandler) UpsertPolicy(c *gin.Context) {
 		AllowToolUse:               boolDefault(req.AllowToolUse, true),
 		RequireApprovalForOutbound: boolDefault(req.RequireApprovalForOutbound, true),
 		RateLimitPerMinute:         intDefault(req.RateLimitPerMinute, 6),
+		RateLimitPolicy:            req.RateLimitPolicy,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

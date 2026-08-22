@@ -155,6 +155,17 @@ func TestSummarizeMessagesIncludesStructuredSections(t *testing.T) {
 	}
 }
 
+func TestEstimateTokensCountsCJKMoreDenselyThanASCII(t *testing.T) {
+	chinese := EstimateTokens("我喜欢简洁回答")
+	english := EstimateTokens("short answer please")
+	if chinese <= english/2 {
+		t.Fatalf("expected CJK token estimate to stay dense, chinese=%d english=%d", chinese, english)
+	}
+	if EstimateTokens("   ") != 0 {
+		t.Fatal("expected blank content to estimate to zero")
+	}
+}
+
 func msg(id, role, content string) store.Message {
 	return store.Message{ID: id, Role: role, Content: content, TokenCount: EstimateTokens(content)}
 }

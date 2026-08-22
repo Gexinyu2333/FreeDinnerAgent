@@ -55,6 +55,13 @@ func TestNormalizeOneBotGroupMessageStripsMention(t *testing.T) {
 	}
 }
 
+func TestSummarizeOneBotMessageAttachments(t *testing.T) {
+	got := summarizeOneBotMessage("看图 [CQ:image,file=abc,url=http://secret] 和文件 [CQ:file,name=a.pdf]")
+	if got != "看图 [图片附件] 和文件 [文件附件]" {
+		t.Fatalf("unexpected summary: %q", got)
+	}
+}
+
 func TestShouldTriggerPolicies(t *testing.T) {
 	botQQ := "999"
 	groupRaw := json.RawMessage(`{"raw_message":"[CQ:at,qq=999] hello"}`)
@@ -114,5 +121,38 @@ func TestBuildOneBotSendPayload(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), `"message_type":"private"`) || !strings.Contains(string(payload), `"user_id":"12345"`) {
 		t.Fatalf("unexpected private payload: %s", string(payload))
+	}
+}
+
+func TestRateLimitRulesIncludeMetadataWindows(t *testing.T) {
+	policy := store.ChannelPolicy{
+		RateLimitPerMinute: 6,
+		Metadata:           json.RawMessage(`{"rate_limits":[{"window_seconds":600,"max_triggers":20},{"window_seconds":3600,"max_triggers":60}]}`),
+	}
+	rules := rateLimitRules(policy)
+	if len(rules) != 3 {
+		t.Fatalf("expected three rate limit rules, got %#v", rules)
+	}
+	if rules[0].Window != time.Minute || rules[0].MaxTriggers != 6 {
+		t.Fatalf("unexpected minute rule: %#v", rules[0])
+	}
+	if rules[1].Window != 10*time.Minute || rules[1].MaxTriggers != 20 {
+		t.Fatalf("unexpected ten-minute rule: %#v", rules[1])
+	}
+	if rules[2].Window != time.Hour || rules[2].MaxTriggers != 60 {
+		t.Fatalf("unexpected hourly rule: %#v", rules[2])
+	}
+}
+
+func TestRateLimitConfigIncludesUserRulesAndCircuitBreaker(t *testing.T) {
+	policy := store.ChannelPolicy{
+		Metadata: json.RawMessage(`{"user_rate_limits":[{"window_seconds":3600,"max_triggers":100}],"circuit_breaker":{"enabled":true}}`),
+	}
+	cfg := rateLimitConfig(policy)
+	if !cfg.CircuitBreaker.Enabled {
+		t.Fatal("expected circuit breaker enabled")
+	}
+	if len(cfg.UserRules) != 1 || cfg.UserRules[0].Window != time.Hour || cfg.UserRules[0].MaxTriggers != 100 {
+		t.Fatalf("unexpected user rules: %#v", cfg.UserRules)
 	}
 }

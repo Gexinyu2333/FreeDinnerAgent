@@ -293,8 +293,8 @@ scheduled_job_template
 - 内置三种建议模板：每日简报、每周回顾、跟进监控。
 - 创建、列表、更新、暂停、恢复、删除心跳任务。
 - 手动 `run-now` 会创建会话，并把 `prompt_template` 拼装为用户输入交给 Agent Loop 执行；运行记录会关联 `agent_turn_id`，输出摘要来自真实 assistant message。
-- 已有到期扫描核心：`scheduler.Service.RunDue` 会查询 `next_run_at <= now` 的 active 任务，逐个记录运行结果并计算下一次运行时间。当前尚未启动常驻后台 goroutine，后续可以由 systemd timer、cron、HTTP 管理入口或进程内 ticker 调用。
+- 已有到期扫描核心和常驻 worker：`scheduler.Service.RunDue` 会查询 `next_run_at <= now` 的 active 任务，逐个记录运行结果并计算下一次运行时间；服务启动时会按 `SCHEDULER_WORKER_ENABLED` 和 `SCHEDULER_POLL_INTERVAL` 启动进程内 ticker。
 - 支持按任务查看运行记录，也支持按 `run_id` 查看单次运行详情。
 - `once`、`daily`、`weekly`、`monthly` 会计算 `next_run_at`。
 - `cron` 已支持 5 字段表达式的 MVP 解析：数字、`*`、逗号、范围和步长，例如 `*/15 9-18 * * 1-5`。
-- 成功运行会重置 `failure_count`；连续失败会累加计数，达到 5 次会自动暂停任务。失败后的 repair/retry/fallback 细节会在 Agent Loop 可靠性模块统一接入。
+- 成功运行会重置 `failure_count`；连续失败会累加计数，达到 5 次会自动暂停任务。单次运行内部的 repair/retry/fallback 复用 Agent Loop 可靠性模块，并写入对应 turn/event/fallback 记录。

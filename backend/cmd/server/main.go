@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"freedinner/backend/internal/api"
+	"freedinner/backend/internal/app"
 	"freedinner/backend/internal/config"
 	"freedinner/backend/internal/db"
 )
@@ -29,9 +29,10 @@ func main() {
 	}
 	defer pool.Close()
 
-	router := api.NewRouter(api.Dependencies{
-		Config: cfg,
-		DB:     pool,
+	router := app.NewHandler(app.Dependencies{
+		Config:  cfg,
+		DB:      pool,
+		Context: ctx,
 	})
 
 	server := &http.Server{

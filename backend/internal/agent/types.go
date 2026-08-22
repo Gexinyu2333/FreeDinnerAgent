@@ -18,6 +18,7 @@ type Action struct {
 	ToolName  string          `json:"tool_name,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Query     string          `json:"query,omitempty"`
+	DryRun    bool            `json:"dry_run,omitempty"`
 }
 
 type ValidationResult struct {
@@ -57,6 +58,7 @@ type ToolExecuteInput struct {
 	ToolName       string
 	Arguments      json.RawMessage
 	IdempotencyKey *string
+	DryRun         bool
 }
 
 type ToolExecuteResult struct {

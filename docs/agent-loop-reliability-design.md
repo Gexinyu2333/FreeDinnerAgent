@@ -431,7 +431,9 @@ MemoryManager 或 Curator 决定是否写入、合并、归档或等待用户确
 6. 最大步数兜底回复。
 7. `agent_events` 流式展示过程。
 
-后续再加 provider fallback、shadow validator、dry run 和更细的 answer contract。
+当前已接入基础 answer contract 和 dry-run 通道。最终回复前会检查最近 observation，如果工具或记忆步骤失败，模型不能声称“已完成、已保存、已发送、已创建”等成功结果；命中后会触发 `answer_contract` 修复重试，超过重试上限才走保守兜底。Tool action 支持 `dry_run: true`，后端只做 schema 校验、审批策略评估和 `tool_call_logs` 记录，不真正执行写入类工具。
+
+更复杂的多模型 shadow validator 属于高成本高级项；基础 answer contract 已在本地规则层闭环。
 
 ## 16. 当前后端 MVP 实现范围
 
@@ -446,19 +448,19 @@ MemoryManager 或 Curator 决定是否写入、合并、归档或等待用户确
 - MemoryManager 已接入上下文构建与 loop 内 `memory_search` action：支持 working/profile/semantic 检索、token 压缩和 retrieval log。
 - `messages.is_anchor` 已支持规则版自动识别：用户表达“记住、以后、偏好、重要、必须/不要”等稳定约束时，会标记 anchor 与原因，供后续摘要和压缩策略保留。
 - 每轮成功回复后会同时写入轻量 `last_episode` working memory 和真实 `episodes` 记录，并创建 `curator_jobs.episode_summary`。当输入呈现“流程、以后、习惯、skill”等信号时，会额外创建 `curator_jobs.dreaming`。
-- Skill 自动披露已接入 Context Builder：后端按 `skills.trigger_keywords` / 名称 / 描述匹配 `skill_disclosure_sections`，以 light 模式注入 `Procedural Skills` 区块，并写入 `context_build_items.item_type = procedural_skill`。
-- Dreaming executor 已有规则版 MVP：`memory.Manager.RunDreaming` 会创建 `dreaming_sessions`、生成 `dreaming_insights`，并完成 session 状态更新。当前是规则洞察，后续可换成 LLM/embedding 驱动的离线复盘。
-- MCP runtime 已有代码层骨架：`internal/mcp.Runtime` 可以根据 MCP definition metadata 和用户启用设置发现 tool specs。真实 stdio/http MCP client、进程生命周期、资源枚举和 tool sync worker 后续接入。
-- Channel webhook 已接入 Agent Loop 生成真实回复并写入 `channel_outbox_messages`；outbox sender 支持显式发送已批准消息到 NapCat/OneBot `/send_msg` endpoint，并回写 `sent/failed`。
+- Skill 自动披露已接入 Context Builder：后端按 `skills.trigger_keywords` / 名称 / 描述匹配 `skill_disclosure_sections`，并根据 query 复杂度选择 light、standard 或 full 渐进式披露，写入 `context_build_items.item_type = procedural_skill`。
+- 成功 episode 遇到“流程、以后、习惯、skill”等信号时，会规则版沉淀私有 `skills/skill_versions/skill_disclosure_sections`。
+- Dreaming executor 已有规则版 MVP：`memory.Manager.RunDreaming` 会创建 `dreaming_sessions`、生成 `dreaming_insights`，并完成 session 状态更新；`GET/POST /api/v1/dreaming-insights` 相关接口支持查看、应用和拒绝 insight。LLM/embedding 驱动的离线复盘归入高级项。
+- MCP runtime 已接入 tool sync 与 HTTP bridge 执行：`internal/mcp.Runtime` 可以根据 MCP definition metadata 和用户启用设置发现 tool specs，并在启动时同步为 `handler_type = mcp` 的 `tool_definitions`；Tool Executor 可通过 metadata 中的 `endpoint` 调用 MCP bridge 的 `tools/call`。
+- Channel webhook 已接入 Agent Loop 生成真实回复并写入 `channel_outbox_messages`；outbox sender 支持显式发送和后台 worker 发送 approved 消息到 NapCat/OneBot `/send_msg` endpoint，并回写 `sent/failed`。
+- Provider fallback 已接入：主 provider 在重试后仍失败时，会尝试切换到同用户其它 active/openai-compatible provider，并记录 `provider_fallback` 事件。
+- Answer contract 已接入：如果前序 observation 有失败，最终回复不能宣称工具、记忆或外发动作已经成功；违规会进入修复重试或保守兜底。
+- Tool dry-run 已接入：结构化 action 可携带 `dry_run: true`，用于影子验证和执行前预检，不会真正调用写入类工具。
 
-当前仍后置：
+高级项：
 
-- Provider fallback：当前只记录 `retry_llm` / `repair_output` / `safe_final_answer`，还没有自动切换备用 provider。
-- Shadow Validator 与 Answer Contract claims 校验。
-- LLM 摘要器：当前自动压缩使用规则摘要 `contextmgr.SummarizeMessages`，还没有调用低成本 LLM summarizer。
-- 完整 Procedural Skill 沉淀：当前已能匹配和披露已有 skill，但从 episodes 自动生成新 `skills/skill_versions/skill_disclosure_sections` 仍需后续 Curator。
-- MCP 真实运行时：当前有 discovery/runtime 骨架，没有启动外部 MCP server 或执行 MCP tool。
-- Channel 后台 sender worker：当前有显式发送 API，尚未启动轮询 approved outbox 的后台 worker。
+- 多模型 Shadow Validator：会引入额外 LLM 调用成本，当前只保留 `agent_llm_feature_settings.feature_key = 'shadow_validator_llm'` 配置入口和本地 answer contract。
+- MCP stdio 进程生命周期和资源枚举：当前支持 HTTP bridge 的 `tools/call` 执行；自动启动外部 MCP server、stdio 会话保活、resources/prompts 枚举和复杂权限映射归入高级项。
 
 ## 17. 参考资料
 

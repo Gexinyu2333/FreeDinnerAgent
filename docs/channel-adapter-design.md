@@ -289,18 +289,18 @@ NapCatQQ MCP Server
 - 出站回复会调用 Agent Loop 生成真实 assistant message，写入 `channel_outbox_messages`，并生成 OneBot `send_msg` payload；群聊默认 `pending`，私聊默认 `approved`。
 - 已支持用户审批或取消 pending outbox 草稿：`POST /api/v1/channel-outbox-messages/{outbox_id}/approve|cancel`。
 - 已支持显式发送 approved outbox：`POST /api/v1/channel-outbox-messages/{outbox_id}/send` 会调用 NapCat/OneBot `/send_msg` endpoint，并回写 `sent` 或 `failed`。
+- 服务启动时可按 `CHANNEL_SENDER_ENABLED`、`CHANNEL_SENDER_INTERVAL` 和 `CHANNEL_SENDER_BATCH_SIZE` 启动 outbox sender worker，自动发送 approved outbox。
+- OneBot 文本中的图片、文件、语音、视频和卡片 CQ 码会被归一化为附件摘要，避免在 normalized text 中保存敏感 URL 或原始附件参数。
+- 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截，并支持在 policy metadata 中配置多窗口 `rate_limits`、用户级 `user_rate_limits` 和 `circuit_breaker` 熔断。
+- 图片、文件、卡片消息已有文本摘要，避免保存敏感 URL 或原始附件参数。
+- 当前 Channel Adapter 负责入口、Agent Loop 回复、outbox 草稿和显式发送；额外 QQ 操作可通过 MCP HTTP bridge 按工具接入。
 
-当前仍留给后续 Channel 增强阶段：
+高级项：
 
-- 后端已支持显式发送 approved outbox，但还没有启动轮询 outbox 的后台 sender worker。
-- 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截；后续可升级为多窗口限频、用户级配额和频道级熔断。
-- 图片、文件、卡片消息目前只预留 `message_type`，还没有附件摘要和发送实现。
-- QQ MCP tools 还未实现，当前 Channel Adapter 负责入口、Agent Loop 回复、outbox 草稿和显式发送。
-
-强制暂缓：
-
-- Telegram、Discord、飞书、微信等具体 Adapter 暂缓实现，和 Workspace Sandbox 强隔离项一样，不进入当前 MVP 开发范围。
-- 多平台具体协议、第三方平台审核、复杂权限申请、平台风控规避策略暂缓实现；当前只保留通用抽象和 NapCatQQ/OneBot 作为首个验证入口。
+- Telegram、Discord、飞书、微信等具体 Adapter 归入高级项，和 Workspace Sandbox 强隔离项一样，不进入当前 MVP 开发范围。
+- 多平台具体协议、第三方平台审核、复杂权限申请、平台风控规避策略归入高级项；当前只保留通用抽象和 NapCatQQ/OneBot 作为首个验证入口。
+- 真实附件下载、附件内容摘要、附件发送和富媒体卡片发送归入高级项；当前完整流程只处理文本与附件占位摘要。
+- QQ 群成员管理、历史消息拉取等额外 QQ MCP tools 不在 Channel Adapter 内硬编码，统一交给 MCP HTTP bridge 工具扩展。
 
 前端入口设计建议：
 

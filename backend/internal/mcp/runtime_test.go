@@ -26,3 +26,12 @@ func TestDiscoverConfiguredToolsRequiresEnabledSetting(t *testing.T) {
 		t.Fatalf("expected disabled setting to hide tools, got %#v", got)
 	}
 }
+
+func TestSanitizeName(t *testing.T) {
+	if got := sanitizeName("My MCP/Server"); got != "my_mcp_server" {
+		t.Fatalf("unexpected sanitized name: %q", got)
+	}
+	if got := sanitizeName("  "); got != "server" {
+		t.Fatalf("expected fallback name, got %q", got)
+	}
+}

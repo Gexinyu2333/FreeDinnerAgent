@@ -9,10 +9,12 @@ import (
 )
 
 type fakeProfiles struct {
-	working []store.WorkingMemory
-	profile []store.ProfileMemory
-	skills  []store.SkillDisclosure
-	logs    []store.MemoryRetrievalLogCreate
+	working   []store.WorkingMemory
+	profile   []store.ProfileMemory
+	episodes  []store.EpisodeMatch
+	skills    []store.SkillDisclosure
+	logs      []store.MemoryRetrievalLogCreate
+	distilled *store.SkillDistillationInput
 }
 
 func (f *fakeProfiles) UpsertWorkingMemory(ctx context.Context, input store.WorkingMemoryUpsert) (store.WorkingMemory, error) {
@@ -27,6 +29,10 @@ func (f *fakeProfiles) SearchProfileMemories(ctx context.Context, userID, query 
 	return f.profile, nil
 }
 
+func (f *fakeProfiles) CreateProfileMemory(ctx context.Context, input store.ProfileMemoryCreate) (store.ProfileMemory, error) {
+	return store.ProfileMemory{ID: "profile-1", UserID: input.UserID, Title: input.Title, Content: input.Content}, nil
+}
+
 func (f *fakeProfiles) CreateRetrievalLog(ctx context.Context, input store.MemoryRetrievalLogCreate) error {
 	f.logs = append(f.logs, input)
 	return nil
@@ -34,6 +40,18 @@ func (f *fakeProfiles) CreateRetrievalLog(ctx context.Context, input store.Memor
 
 func (f *fakeProfiles) CreateEpisode(ctx context.Context, input store.EpisodeCreate) (store.Episode, error) {
 	return store.Episode{ID: "episode-1", UserID: input.UserID, ConversationID: input.ConversationID, UserInput: input.UserInput}, nil
+}
+
+func (f *fakeProfiles) SearchEpisodes(ctx context.Context, userID, query string, limit int) ([]store.EpisodeMatch, error) {
+	return f.episodes, nil
+}
+
+func (f *fakeProfiles) CreateSkillFromEpisode(ctx context.Context, input store.SkillDistillationInput) (store.SkillDistillationResult, error) {
+	f.distilled = &input
+	return store.SkillDistillationResult{
+		Skill:   store.Skill{ID: "skill-1", Name: input.Name},
+		Version: store.SkillVersion{ID: "version-1", SkillID: "skill-1", Version: 1},
+	}, nil
 }
 
 func (f *fakeProfiles) MatchSkillDisclosures(ctx context.Context, userID, query, loadMode string, limit int) ([]store.SkillDisclosure, error) {
@@ -54,6 +72,15 @@ func (f *fakeProfiles) FinishDreamingSession(ctx context.Context, sessionID, use
 
 func (f *fakeProfiles) CreateDreamingInsight(ctx context.Context, input store.DreamingInsightCreate) (store.DreamingInsight, error) {
 	return store.DreamingInsight{ID: "insight-1", DreamingSessionID: input.DreamingSessionID, UserID: input.UserID, InsightType: input.InsightType, Content: input.Content}, nil
+}
+
+func (f *fakeProfiles) FindDreamingInsight(ctx context.Context, userID, insightID string) (store.DreamingInsight, error) {
+	target := LayerProfile
+	return store.DreamingInsight{ID: insightID, UserID: userID, InsightType: "profile_update", TargetLayer: &target, Content: "用户喜欢表格", Confidence: 0.8, Status: "proposed"}, nil
+}
+
+func (f *fakeProfiles) SetDreamingInsightStatus(ctx context.Context, userID, insightID, status string) (store.DreamingInsight, error) {
+	return store.DreamingInsight{ID: insightID, UserID: userID, Status: status}, nil
 }
 
 type fakeSemantic struct {
@@ -122,6 +149,40 @@ func TestRouteOnlyUsesSemanticForKnowledgeLikeQueries(t *testing.T) {
 	}
 }
 
+func TestRetrieveIncludesEpisodicMemoryForSimilarQueries(t *testing.T) {
+	profiles := &fakeProfiles{
+		episodes: []store.EpisodeMatch{{
+			Episode: store.Episode{
+				ID:            "ep-1",
+				AgentSummary:  "上次用户要求生成周报。",
+				FinalResponse: "已按项目和风险整理。",
+				Status:        "success",
+				Importance:    4,
+			},
+			Tags:  []string{"summary"},
+			Score: 0.9,
+		}},
+	}
+	manager := NewManager(profiles, nil)
+	result, err := manager.Retrieve(context.Background(), RetrieveInput{
+		UserID:         "user-1",
+		ConversationID: "conv-1",
+		Query:          "和上次类似，生成周报",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, chunk := range result.Chunks {
+		if chunk.Layer == LayerEpisodic && chunk.RefID == "ep-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected episodic chunk, got %#v", result.Chunks)
+	}
+}
+
 func TestCompressDeduplicatesAndPreservesHighPriority(t *testing.T) {
 	chunks := []Chunk{
 		{Layer: LayerSemantic, RefID: "s-1", Content: "semantic", Score: 0.95, TokenCount: 10},
@@ -154,6 +215,27 @@ func TestMatchSkillsDelegatesToProfileRetriever(t *testing.T) {
 	}
 }
 
+func TestDistillSkillFromEpisodeCreatesPrivateSkill(t *testing.T) {
+	profiles := &fakeProfiles{}
+	manager := NewManager(profiles, nil)
+	taskType := "summary"
+	result, err := manager.DistillSkillFromEpisode(context.Background(), SkillDistillationInput{
+		UserID:   "user-1",
+		Episode:  store.Episode{ID: "episode-abcdef"},
+		Query:    "以后每次帮我整理周报流程",
+		TaskType: &taskType,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Skill.ID != "skill-1" {
+		t.Fatalf("unexpected distillation result: %#v", result)
+	}
+	if profiles.distilled == nil || profiles.distilled.EpisodeID != "episode-abcdef" {
+		t.Fatalf("expected store distillation input, got %#v", profiles.distilled)
+	}
+}
+
 func TestRunDreamingCreatesInsight(t *testing.T) {
 	manager := NewManager(&fakeProfiles{}, nil)
 	result, err := manager.RunDreaming(context.Background(), DreamingInput{UserID: "user-1", TriggerType: "manual", Scope: "user", Query: "周报流程"})
@@ -165,5 +247,19 @@ func TestRunDreamingCreatesInsight(t *testing.T) {
 	}
 	if len(result.Insights) != 1 {
 		t.Fatalf("expected one insight, got %d", len(result.Insights))
+	}
+}
+
+func TestApplyDreamingInsightCreatesProfileMemory(t *testing.T) {
+	manager := NewManager(&fakeProfiles{}, nil)
+	result, err := manager.ApplyDreamingInsight(context.Background(), "user-1", "insight-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Insight.Status != "applied" {
+		t.Fatalf("expected applied insight, got %#v", result.Insight)
+	}
+	if result.ProfileMemory == nil || result.ProfileMemory.ID != "profile-1" {
+		t.Fatalf("expected profile memory, got %#v", result.ProfileMemory)
 	}
 }

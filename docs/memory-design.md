@@ -11,7 +11,7 @@ FreeDinnerAgent 的记忆系统参考 Hermes Agent 的分层记忆思想，但�
 - 支持用户隔离，所有正式记忆都绑定 `user_id`。
 - 支持部分记忆共享，Semantic Memory 和 Procedural Memory 可设置为公共资源。
 - 支持 Semantic Memory embedding，使用 PostgreSQL + pgvector 实现 RAG 向量检索；是否生成和使用 embedding 由用户配置控制。
-- 支持后台 Curator 和 Dreaming 机制，自动压缩历史、合并记忆、沉淀技能、更新向量。
+- 支持规则版 Curator 和 Dreaming 机制：可自动写入 episode、生成复盘任务、沉淀部分画像/技能候选，并产出可查看、可应用、可拒绝的 Dreaming insight。LLM/embedding Curator 和异步更新向量归入高级项。
 
 ## 2. 四层记忆模型
 
@@ -207,8 +207,8 @@ ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops);
 - Retrieval Engine：统一执行关键词检索、标签检索和向量检索。
 - Memory Compressor：压缩召回片段，控制 Token。
 - Memory Persister：统一写入 Working、Profile、Episodic、Procedural、Semantic Memory。
-- Curator Connector：把每轮完整交互推送给后台复盘任务。
-- Dreaming Engine：在空闲或定时阶段重放历史记忆，做离线合并、提炼、遗忘和技能候选生成。
+- Curator Connector：把每轮完整交互写入 episode，并创建复盘任务。
+- Dreaming Engine：规则版复盘入口，可创建 Dreaming session 和 insight；自动调度、LLM/embedding 离线复盘和复杂合并归入高级项。
 
 所有工具和 Agent 逻辑都不直接写记忆表，而是通过 MemoryManager 读写，避免记忆污染。
 
@@ -288,8 +288,8 @@ ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops);
 
 - 文档元数据写入 `knowledge_documents`。
 - 文档切片写入 `knowledge_chunks`。
-- MVP 阶段先支持关键词检索。
-- 增强阶段通过 Curator 异步生成 embedding。
+- 当前支持关键词检索；如果用户开启 `embedding_enabled` 且配置 embedding provider，则同步生成 chunk embedding 并通过 pgvector 检索。
+- 大文档异步 embedding、只重算变更 chunk 和后台 re-embedding worker 归入高级项。
 - 公共知识库必须由用户或管理员显式设置 `visibility = public`。
 
 ## 5. 记忆存储结构
@@ -534,7 +534,7 @@ Dreaming 发生在后台，目标是“让记忆库本身变得更好”：
 10. Context Engine 按优先级组装 Prompt。
 11. LLM 推理并可能触发工具调用。
 12. 保存最终消息、工具调用和 memory retrieval log。
-13. Curator 异步生成 episode 摘要、抽取画像记忆、沉淀技能或更新 embedding。
+13. Curator 写入 episode 摘要任务，并可基于规则抽取画像记忆或沉淀技能候选；LLM/embedding Curator 和异步更新 embedding 归入高级项。
 
 ## 10. Prompt 加载优先级
 
@@ -587,7 +587,7 @@ Semantic Memory 最适合做 embedding，因为它存的是外部知识切片，
 
 推荐策略：
 
-- 文档导入后，如果用户开启 embedding，则异步生成 embedding，不阻塞用户。
+- 文档导入后，如果用户开启 embedding，当前 MVP 会同步生成 embedding 并写入 chunk；生产增强阶段建议改为 curator 异步任务，避免大文档阻塞请求。
 - chunk 粒度控制在 300 到 800 tokens。
 - 检索时先限定可见范围，再做向量 top-k，避免私有知识被跨用户召回。
 - 检索结果进入 Prompt 前做摘要或截断。
@@ -640,10 +640,11 @@ MVP 阶段建议实现：
 - 成功 Agent Turn 会自动写入 `episodes`，并创建 `curator_jobs.episode_summary`。
 - Procedural Memory/Skills 已支持 light disclosure 匹配和 Context Builder 注入。
 - Dreaming 已有规则版执行器，可创建 `dreaming_sessions` 和 `dreaming_insights`。
+- episode 关键词/标签相似检索已接入 MemoryManager 和 Context Builder。
+- 从 episodes 规则版自动沉淀新 `skills/skill_versions/skill_disclosure_sections` 已接入。
+- Dreaming insight 已支持列表、应用和拒绝；profile_update 会写入 Profile Memory，skill_candidate 可沉淀私有 Skill，其它类型会创建 memory_consolidation curator job。
+- Semantic Memory embedding 当前是同步生成的 MVP，并受用户级 `embedding_enabled` 和 `embedding_cost_policy` 控制。
 
-当前仍留给后续 Curator 阶段：
+高级项：
 
-- episode embedding 和相似 episode 向量检索尚未接入。
-- 从 episodes 自动沉淀新 `skills/skill_versions/skill_disclosure_sections` 尚未实现。
-- Dreaming insight 的应用流程、用户确认和自动合并尚未实现。
-- Semantic Memory embedding 当前是同步生成的 MVP；后续应改成 curator 异步任务，只对变更 chunk 重算。
+- Episode embedding 向量检索、LLM/embedding Curator、复杂自动合并策略和异步 re-embedding worker 都会引入额外模型调用或后台队列复杂度，归入高级项；如果以后开启，必须继续受 `agent_llm_feature_settings`、`embedding_enabled` 和用户自己的 provider/API Key 控制。

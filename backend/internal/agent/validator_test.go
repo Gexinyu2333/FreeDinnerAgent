@@ -34,3 +34,33 @@ func TestValidateActionRejectsUnavailableTool(t *testing.T) {
 		t.Fatal("expected unavailable tool to fail validation")
 	}
 }
+
+func TestValidateActionAcceptsDryRunToolCall(t *testing.T) {
+	action, result := ValidateAction(`{"type":"tool_call","tool_name":"create_task","dry_run":true,"arguments":{"title":"测试"}}`, []ToolDescriptor{
+		{Name: "create_task", ParameterSchema: json.RawMessage(`{}`)},
+	})
+	if !result.Passed {
+		t.Fatalf("expected dry-run tool call to pass, got %#v", result)
+	}
+	if !action.DryRun {
+		t.Fatal("expected dry_run to be preserved")
+	}
+}
+
+func TestValidateFinalAnswerContractRejectsSuccessClaimAfterFailure(t *testing.T) {
+	result := ValidateFinalAnswerContract("已完成，我已经帮你创建好了。", []Observation{
+		{ActionType: ActionToolCall, Text: "工具 create_task 执行失败", Failed: true},
+	})
+	if result.Passed {
+		t.Fatal("expected success claim after failed observation to fail")
+	}
+}
+
+func TestValidateFinalAnswerContractAllowsHonestFailure(t *testing.T) {
+	result := ValidateFinalAnswerContract("刚才创建任务失败了，需要你稍后重试。", []Observation{
+		{ActionType: ActionToolCall, Text: "工具 create_task 执行失败", Failed: true},
+	})
+	if !result.Passed {
+		t.Fatalf("expected honest failure answer to pass, got %#v", result)
+	}
+}

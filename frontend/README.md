@@ -22,7 +22,7 @@
 - Web Chat 和 Channel Adapter 不共用同一个“新建对话”入口。
 - Web Chat 由用户输入 query 主动触发 Agent Loop。
 - Channel Adapter 由外部消息监听触发 Agent Loop，每个连接默认有一个专用监听/主控会话。
-- 当前 MVP 只把 NapCatQQ / OneBot 作为可验证入口；微信、Telegram、Discord、飞书等具体 Adapter 强制暂缓实现。
+- 当前 MVP 只把 NapCatQQ / OneBot 作为可验证入口；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项。
 
 后续初始化命令建议：
 

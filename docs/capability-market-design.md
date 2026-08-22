@@ -443,10 +443,11 @@ MVP 第一版可以先做：
 3. Agent 配置绑定模板版本。
 4. Context Builder 加载模板内容。
 5. 前端可创建、选择、预览模板。
+6. 创建模板时执行规则版安全扫描，并把 `auto_approved` 审核记录写入版本的 `safety_policy`。
 
-暂缓：
+高级项：
 
-- 公开模板审核流。
+- 独立管理员工作台和人工审核角色体系。
 - A/B 测试。
 - 变量的跨字段联动、条件展示等高级校验。
 
@@ -534,15 +535,24 @@ MVP 第一版可以先做：
 - 新增系统提示词模板 API：
   - `POST /api/v1/system-prompt-templates`
   - `POST /api/v1/system-prompt-templates/preview`
+  - `POST /api/v1/system-prompt-template-versions/{version_id}/fork`
 - Agent 绑定 `system_prompt_template` 时，`agent_capability_bindings.capability_ref_id` 锁定具体 `system_prompt_template_versions.id`，避免公共模板更新导致行为漂移。
 - `llm.Service` 已在构建上下文前解析 Agent 绑定的系统提示词模板版本；如果没有绑定，则继续使用 `user_agent_configs.system_prompt`。
 - 系统提示词模板预览支持 `{variable}` 变量替换、用户自定义 override、required 校验、number/boolean/enum/json 类型校验；创建模板时会自动从内容中提取基础变量定义。
 - 市场条目已支持安装量回算和用户评分，评分会写入 `marketplace_item_reviews` 并回算 `marketplace_items.rating`。
+- 系统提示词模板创建时会做规则版安全扫描，拦截绕过审批、泄露 API Key、跨用户读取等危险指令；通过扫描的版本会把 `review_status = auto_approved` 写入 `safety_policy`，便于审计。
+- 公共模板版本支持 fork 为当前用户的私有模板。
 
-当前仍留给后续阶段：
+当前已落地：
 
-- MCP Server runtime 已有 `internal/mcp.Runtime` 骨架，可从 MCP definition metadata 与用户启用设置中发现 tool specs；真实 MCP client、进程生命周期和工具同步 worker 后续实现。
-- Skills 的自动匹配和 `skill_disclosure_sections` light 披露已接入 Context Builder；standard/full 渐进式披露、LLM/embedding skill router 和自动 skill 沉淀仍为后续增强。
-- 市场的审核、fork、公共模板安全扫描还未实现。
-- Knowledge Base、Channel Adapter、Tool 的自动上架策略还未统一封装，当前以各自模块创建定义为主。
+- MCP Server runtime 可从 MCP definition metadata 与用户启用设置中发现 tool specs，并在启动时同步为 Tool Registry 中的 MCP tool；Tool Executor 支持通过 HTTP MCP bridge 调用 `tools/call`。
+- Skills 的自动匹配和 `skill_disclosure_sections` light/standard/full 渐进式披露已接入 Context Builder；基于 episode 的规则版自动 skill 沉淀已接入。
+- Tool 与 Channel Adapter 的自动上架已统一封装到启动同步流程：内置工具和 NapCatQQ Channel Provider 会写入 `marketplace_items`。
 - Tool Router 已优先按默认 Agent 的 `agent_capability_bindings` 过滤 tool 候选；如果该 Agent 暂未绑定任何 tool，则回退到用户可见工具，方便开发期逐步接入能力市场。
+
+高级项：
+
+- 独立管理员审核工作台和更完整的公共模板安全扫描不属于当前个人助理 MVP，后续可以在引入角色/权限系统后扩展。
+- LLM/embedding Skill Router 属于高成本增强；当前使用规则匹配和 light/standard/full 渐进披露，已满足完整流程闭环。
+- MCP stdio 进程生命周期、resources/prompts 枚举和复杂权限映射归入高级项；当前运行时以 HTTP MCP bridge 作为可执行闭环。
+- Knowledge Base 的自动上架需要独立“发布/共享知识库”事件，目前只完成文档写入、私有/公共可见性和检索；市场化发布工作台归入高级项。

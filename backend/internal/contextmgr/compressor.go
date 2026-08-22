@@ -21,6 +21,7 @@ type ManualCompressInput struct {
 	Messages          []store.Message
 	KeepRecentTurns   int
 	TargetSummaryType string
+	SummaryText       *string
 }
 
 type ManualCompressResult struct {
@@ -48,6 +49,9 @@ func (c *Compressor) ManualCompress(ctx context.Context, input ManualCompressInp
 	}
 
 	summaryText := SummarizeMessages(compressed)
+	if input.SummaryText != nil && *input.SummaryText != "" {
+		summaryText = *input.SummaryText
+	}
 	originalTokens := messagesTokenCount(compressed)
 	compressedTokens := EstimateTokens(summaryText)
 	var startID, endID *string

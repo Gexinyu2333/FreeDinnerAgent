@@ -174,6 +174,8 @@ LLM 生成 tool call 后，后端不能直接执行。
 6. 生成 `idempotency_key`，防止重复执行。
 7. 参数通过后再进入执行器。
 
+如果 LLM 生成的 action 携带 `dry_run: true`，后端只执行 1-6 步，写入一次 `tool_call_logs` 预检记录，返回 `would_execute`、`would_require_approval` 和规范化后的参数，不真正调用写入类工具。这个通道可用于 shadow validator、执行前预览和高风险动作解释。
+
 校验失败时：
 
 - 写入 `tool_call_logs`。
@@ -183,6 +185,7 @@ LLM 生成 tool call 后，后端不能直接执行。
 ## 8. 工具稳定性处理
 
 本章节只处理工具执行层面的稳定性。LLM 输出格式错误、模型调用失败、上下文超限和最终回复不可靠等问题，由 Agent Validator 和 Fallback Manager 处理。
+当前基础 answer contract 已接入 Agent Loop：如果前序工具 observation 失败，最终回复不能声称工具已经成功执行，否则会触发修复重试或保守兜底。
 
 ### 8.1 超时
 
@@ -261,7 +264,7 @@ LLM 生成 tool call 后，后端不能直接执行。
   - `never`：所有工具调用直接执行，适合本地开发或完全信任环境。
 - 后端创建 `tool_call_logs.status = pending` 和 `tool_approval_requests.status = pending`。
 - 用户拒绝后，审批记录变为 `rejected`，对应 `tool_call_logs.status = cancelled`。
-- 用户批准后，审批记录变为 `approved`，对应 tool call 写入 `approved_at`。批准后自动恢复执行工具留给 Agent Harness 恢复机制实现。
+- 用户批准后，审批记录变为 `approved`，对应 tool call 写入 `approved_at`。当前版本先完成审批状态和审计闭环；自动恢复同一个等待中的 Agent Turn 继续执行属于高级项。
 
 审批请求写入：
 
@@ -278,7 +281,7 @@ tool_approval_requests
 5. 前端展示确认面板。
 6. 用户批准或拒绝。
 7. 写入 `approval_resolved` 事件。
-8. 批准则继续执行工具，拒绝则取消该工具调用。
+8. 批准会写入 `approved_at`，拒绝会取消该工具调用；自动恢复同一轮 Agent Turn 继续执行属于高级项。
 
 ## 10. 调用日志
 

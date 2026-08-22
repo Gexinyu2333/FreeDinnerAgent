@@ -427,12 +427,14 @@ memory_value = recall_count * usefulness_score * importance - age_penalty
 - 新增 `ContextStore`，支持写入 `context_build_logs` 和 `context_build_items`，为上下文体检报告提供数据。
 - `llm.Service.SendMessage` 已接入 Context Builder，不再直接塞最近 20 条消息。
 - 新增接口：`POST /api/v1/conversations/{conversation_id}/compress`，用于前端“整理当前对话”按钮。
+- Token 估算已从纯字符级粗估升级为 CJK/ASCII 混合启发式：中文、日文、韩文按更高密度估算，英文按约 4 字符 1 token 估算。
+- 自动压缩默认使用本地规则版 `contextmgr.SummarizeMessages`，不产生额外模型费用。只有当用户在 `agent_llm_feature_settings` 中把 `auto_compression_llm` 显式开启时，才会使用 LLM 生成低温结构化摘要；该 feature 可单独指定当前用户自己的便宜 `provider_id`、`model_override` 和 `temperature`。LLM 摘要失败时仍回退到规则版。
+- Procedural Skills 已以 light/standard/full disclosure 接入 Context Builder；MemoryManager 已能注入 working/profile/semantic memory。Tool Definitions 通过 Agent Loop 的 ReAct 输出协议披露给模型，Tool Results 通过 observation 回填。
+- Episodic Memory 已自动写入 `episodes`，相似 episode 关键词/标签检索已接入 MemoryManager 并以 `episodic` chunk 注入 Context Builder。
+- 自动压缩触发器已接入 `llm.Service.SendMessage`：当 Context Builder 返回 `recent_turn_limit` 或 `token_threshold` 策略，且会话长度达到阈值时，会自动调用 `contextmgr.Compressor` 写入 `conversation_summaries` 和 `conversation_compression_jobs`。
+- Anchor Message 的自动识别规则已接入 `messages.is_anchor` / `anchor_reason`；纠正、撤销、改口类表达会标记为 `correction_or_conflict`。
 
-当前仍留给后续阶段：
+高级项：
 
-- 当前摘要是规则式结构化摘要，后续可以改成 LLM 摘要并保护 Anchor Messages 的来源引用。
-- Procedural Skills 已以 light disclosure 接入 Context Builder；MemoryManager 已能注入 working/profile/semantic memory。Tool Definitions 通过 Agent Loop 的 ReAct 输出协议披露给模型，Tool Results 通过 observation 回填。
-- Episodic Memory 已自动写入 `episodes`，相似 episode 检索和 episode embedding 仍待后续接入 Context Builder。
-- Token 估算仍是字符级粗估，后续应按具体模型 tokenizer 计算。
-- 自动压缩触发器已接入 `llm.Service.SendMessage`：当 Context Builder 返回 `recent_turn_limit` 或 `token_threshold` 策略，且会话长度达到阈值时，会自动调用 `contextmgr.Compressor` 写入 `conversation_summaries` 和 `conversation_compression_jobs`。当前摘要仍为规则版 `SummarizeMessages`，后续可替换成低成本 LLM summarizer。
-- Anchor Message 的自动识别规则已接入 `messages.is_anchor` / `anchor_reason`；纠正、撤销、改口类表达会标记为 `correction_or_conflict`，复杂跨轮事实冲突仍留给后续 LLM/embedding validator。
+- 模型级精确 tokenizer 计数属于高级项；当前使用 CJK/ASCII 混合启发式估算。
+- Episode embedding 向量检索和复杂跨轮事实冲突 LLM/embedding validator 属于高成本高级项；当前使用本地关键词/标签检索与本地 anchor 规则。

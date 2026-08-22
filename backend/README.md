@@ -12,12 +12,58 @@
 核心模块规划：
 
 - `cmd/server`：服务启动入口
-- `internal/api`：HTTP 路由和请求处理
+- `internal/app`：组合根，负责依赖组装、内置能力同步和后台 worker 启动
+- `internal/api`：HTTP handler、middleware、统一响应和路由注册
 - `internal/agent`：Agent 编排、上下文管理、工具调用决策
+- `internal/channel`：Channel Adapter 抽象、NapCatQQ / OneBot webhook、outbox 和 sender worker
+- `internal/contextmgr`：上下文拼装、token 阈值、摘要压缩和上下文体检
+- `internal/knowledge`：知识库文档切片、embedding 和检索
+- `internal/llm`：OpenAI-compatible LLM 客户端、聊天服务和 Agent Loop 入口
+- `internal/market`：Tools、MCP、Skills、知识库和系统提示词市场
+- `internal/mcp`：MCP definition runtime 骨架、metadata discovery 和 tool sync
 - `internal/memory`：记忆写入、检索和管理
+- `internal/scheduler`：心跳任务调度、到期扫描和运行记录
+- `internal/secret`：用户 API Key、渠道 token 等敏感配置加解密
 - `internal/tool`：工具注册、参数校验、执行和降级处理
+- `internal/workspace`：用户 workspace、文件操作、CLI sandbox 和资源配额
 - `internal/store`：数据库访问层
 - `internal/config`：环境变量和配置加载
+
+当前约定：`internal/app/app.go` 串主依赖图，`stores.go` 创建 store，`bootstrap.go` 做启动期同步；`internal/api/router.go` 只创建 Gin router，具体路由按 `routes_*.go` 拆分。
+
+`internal/api` 的 handler 保持 HTTP 边界职责：解析 path/query/body、读取当前用户、做轻量请求校验、调用 service/store facade，并使用统一 `OK/Error` 返回。`settings_handler.go`、`scheduled_job_handler.go`、`market_handler.go`、`workspace_handler.go` 当前仍按入口域聚合 DTO 和 handler 方法；由于其主要复杂度来自请求结构和错误映射，暂不为行数继续拆散。
+
+`internal/channel` 已按职责拆分：`service.go` 保留连接和策略入口，`webhook.go` 负责入站事件与 Agent 回复草稿，`outbox.go` 负责审批和发送，`policy.go` 负责触发和限频，`onebot.go` 负责 OneBot 协议细节，`config_crypto.go` 负责连接配置加解密。
+
+`internal/workspace` 也按职责拆分：`service.go` 管生命周期和状态，`files.go` 管文件 I/O，`command.go` 管 CLI 执行和运行记录，`path.go` 管路径作用域和逃逸防护，`policy.go` 管默认策略、命令白名单和参数安全检查，`runner.go` 管 local/container/nsjail 执行器。
+
+`internal/scheduler` 按心跳任务职责拆分：`service.go` 管任务 CRUD，`worker.go` 管后台扫描，`execution.go` 管触发执行和运行记录，`schedule.go` 管下次运行时间与 cron 解析，`templates.go` 管内置建议模板，`update.go` 管局部更新 merge。
+
+`internal/tool` 按工具调用职责拆分：`service.go` 管主执行流水线，`routing.go` 管 Tool Router 和 Agent 绑定过滤，`approval.go` 管审批策略和 dry-run，`builtin_definitions.go` 管内置工具定义，`builtins.go` 管内置工具实现，`mcp.go` 管 MCP HTTP bridge，`schema.go` 管参数校验。
+
+`internal/memory` 按记忆层职责拆分：`manager.go` 管接口和核心类型，`lifecycle.go` 管 working/episode 写入，`retrieval.go` 管统一检索和压缩，`chunks.go` 管层到 chunk 的转换，`skills.go` 管 Procedural Skill，`dreaming.go` 管 dreaming insight，`curator.go` 管 curator job，`util.go` 管 token 估算和结果统计。
+
+`internal/llm` 按主链路职责拆分：`service.go` 管 Web/Channel 发送入口，`agent_loop.go` 管 ReAct 主循环，`loop_observation.go` 管 memory/tool observation，`loop_finish.go` 管 turn 收尾，`loop_recording.go` 管校验和 fallback 记录，`curation.go` 管对话后记忆沉淀，`context.go` 管上下文构建，`features.go` 管额外 LLM feature provider，`compression.go` 管自动压缩，`openai.go` 管兼容 OpenAI 的 HTTP client。
+
+`internal/market` 按服务职责拆分：`service.go` 保留 marketplace 列表、安装、评分、绑定和系统提示词模板主用例，`prompt_template.go` 管系统提示词变量提取、渲染、值校验、token 估算和安全扫描。
+
+`internal/contextmgr` 按上下文构建阶段拆分：`builder.go` 保留 Build 主流程、summary 加载和 build log 写入，`budget.go` 管 token 预算，`messages.go` 管最近消息选择和规则摘要，`render.go` 管 memory/skill/summary 渲染，`items.go` 管 context build item 记录，`tokens.go` 管 token 估算、压缩策略和 used sections。
+
+`internal/store` 按数据库领域拆分：`memory_store.go` 只保留记忆相关类型和构造器，`memory_profile_store.go` 管 Profile Memory 和类型定义查询，`memory_working_store.go` 管 Working Memory，`memory_episode_store.go` 管 Episodic Memory，`memory_skill_store.go` 管 Procedural Skill，`memory_dreaming_store.go` 管 Dreaming，`memory_curator_store.go` 管 Curator Job，`memory_retrieval_log_store.go` 管检索日志，`memory_scan.go` 管 scan helper。
+
+`internal/store` 的 Channel 部分也按表域拆分：`channel_store.go` 只保留 Channel 类型、构造器和 public DTO 转换，`channel_provider_store.go` 管 provider definition，`channel_connection_store.go` 管用户连接，`channel_policy_store.go` 管触发策略，`channel_conversation_store.go` 管外部会话映射，`channel_inbox_store.go` 管入站事件和限频计数，`channel_outbox_store.go` 管外发消息状态流转，`channel_scan.go` 管 scan helper。
+
+`internal/store` 的 Market 部分按能力市场子域拆分：`market_store.go` 只保留 marketplace、install、binding 和 system prompt 类型，`marketplace_item_store.go` 管市场条目、上架和评分，`market_capability_store.go` 管安装和 Agent 绑定，`market_prompt_store.go` 管系统提示词模板、版本和变量，`market_scan.go` 管 scan helper，`market_util.go` 管可见性和 token 估算。
+
+`internal/store` 的 Tool 部分按调用生命周期拆分：`tool_store.go` 只保留工具定义、调用日志、审批请求等类型和构造器，`tool_definition_store.go` 管内置工具和 MCP tool 同步，`tool_query_store.go` 管工具列表、Agent 绑定工具和单工具查找，`tool_log_store.go` 管 router log 与 call log，`tool_approval_store.go` 管审批请求创建和处理，`tool_scan.go` 管 scan helper，`tool_util.go` 管 owner 工具函数。
+
+`internal/store` 的 Workspace 部分按生命周期拆分：`workspace_store.go` 只保留 workspace/file/event/command/quota 类型和构造器，`workspace_lifecycle_store.go` 管启用、策略更新、触达和销毁状态，`workspace_file_store.go` 管文件记录和事件，`workspace_command_store.go` 管命令运行记录，`workspace_quota_store.go` 管配额快照，`workspace_scan.go` 管 scan helper。
+
+`internal/store` 的 Scheduled Job 部分按 job 与 run 拆分：`scheduled_job_store.go` 只保留心跳任务和运行记录类型，`scheduled_job_lifecycle_store.go` 管任务创建、更新、列表、到期扫描和状态更新，`scheduled_job_run_store.go` 管运行记录，`scheduled_job_scan.go` 管 scan helper。
+
+`internal/store` 的 Agent Config 部分按配置本体和额外 LLM feature 拆分：`agent_config_store.go` 只保留 Agent 配置和 feature setting 类型，`agent_config_lifecycle_store.go` 管默认配置创建、读取和更新，`agent_config_feature_store.go` 管 feature setting 默认项和替换更新，`agent_config_scan.go` 管 scan helper，`agent_config_util.go` 管枚举归一化。
+
+`internal/store` 的 Harness 部分按 Agent Turn 生命周期拆分：`harness_store.go` 只保留 turn/event/loop/validation/fallback 类型，`harness_turn_store.go` 管 turn 创建、启动、完成和读取，`harness_event_store.go` 管事件追加和列表，`harness_loop_store.go` 管 loop step，`harness_reliability_store.go` 管 validation/fallback 记录，`harness_scan.go` 管 scan helper。
 
 后续运行命令建议：
 
@@ -34,6 +80,11 @@ WORKSPACE_SANDBOX_IMAGE=freedinner-agent-sandbox:latest
 WORKSPACE_DOCKER_BINARY=docker
 WORKSPACE_PODMAN_BINARY=podman
 WORKSPACE_NSJAIL_BINARY=nsjail
+SCHEDULER_WORKER_ENABLED=true
+SCHEDULER_POLL_INTERVAL=1m
+CHANNEL_SENDER_ENABLED=true
+CHANNEL_SENDER_INTERVAL=15s
+CHANNEL_SENDER_BATCH_SIZE=20
 ```
 
 本地开发默认使用 `./.workspaces` 和 `local_dir` sandbox。Linux 部署时可以把 `WORKSPACE_ROOT` 改成 `/var/lib/freedinner/workspaces`，再将用户 workspace 的 `sandbox_type` 配成 `docker`、`podman` 或 `nsjail`。这些 runtime 不会在本地开发时自动启动，只有对应用户启用对应 sandbox 类型时才会被调用。
@@ -85,6 +136,17 @@ curl -sS -X PATCH http://localhost:8080/api/v1/me/agent-config \
   -H "Content-Type: application/json" \
   -d '{"embedding_enabled":true,"embedding_cost_policy":{"mode":"manual","max_monthly_tokens":100000,"embed_public_knowledge":false}}'
 ```
+
+开启某个额外 LLM 后台能力，例如自动压缩使用一个更便宜的 OpenAI-compatible provider 做摘要：
+
+```bash
+curl -sS -X PATCH http://localhost:8080/api/v1/me/agent-config \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"llm_feature_settings":[{"feature_key":"auto_compression_llm","enabled":true,"provider_id":"cheap-provider-id","model_override":"cheap-summary-model","temperature":0.2}]}'
+```
+
+默认情况下这些额外 LLM 能力全部关闭，自动压缩、Dreaming 和 Curator 会优先使用本地规则版实现，避免不知不觉消耗用户 token。额外 LLM 功能配置存储在 `agent_llm_feature_settings` 表中，每个 feature 可独立设置 `enabled`、`provider_id`、`model_override` 和 `temperature`。
 
 新增模型供应商配置：
 
@@ -237,7 +299,8 @@ Channel Adapter 和普通 Web Chat 的触发方式不同：
 - Channel Adapter 是监听入口，外部 QQ 私聊、群聊 @ 或关键字命中后，由 webhook 事件触发 Agent Loop。
 - 前端建议单独做 Channels 页面管理连接、策略、inbox、outbox 和审批；不要把 Channel connection 当成普通“新建对话”入口。
 - 每个 `channel_connection` 默认对应一个专用监听/主控会话；外部私聊、群聊等 scope 通过 `external_conversations` 映射到本地 conversation，并在 UI 上归属该 Channel connection。
-- 微信、Telegram、Discord、飞书等具体 Adapter 当前强制暂缓实现，只保留抽象；当前可运行验证入口是 NapCatQQ / OneBot。
+- 微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留抽象；当前可运行验证入口是 NapCatQQ / OneBot。
+- approved outbox 可以通过显式接口发送，也可以由后台 sender worker 自动发送。
 
 创建 NapCatQQ 渠道连接：
 
@@ -413,7 +476,7 @@ curl -sS -X POST "http://localhost:8080/api/v1/conversations/$CONVERSATION_ID/me
   -d '{"content":"我明天下午三点要交报告，帮我记一下。"}'
 ```
 
-发送消息会读取当前用户默认模型供应商配置。当前阶段已接入 OpenAI Responses API，并兼容常见 OpenAI Chat Completions 格式的第三方网关。配置第三方网关时，`chat_base_url` 可以填写类似 `https://example.com/openai/v1` 或完整的 `https://example.com/openai/v1/chat/completions`。如果还没有配置 provider，会返回 `MODEL_PROVIDER_REQUIRED`。一次发送会同步创建 `agent_turns`，成功响应里的 `turn_id` 可用于查看本轮 Agent 执行轨迹。
+发送消息会读取当前用户默认模型供应商配置。当前阶段已接入 OpenAI Responses API，并兼容常见 OpenAI Chat Completions 格式的第三方网关。配置第三方网关时，`chat_base_url` 可以填写类似 `https://example.com/openai/v1` 或完整的 `https://example.com/openai/v1/chat/completions`。如果还没有配置 provider，会返回 `MODEL_PROVIDER_REQUIRED`。默认 provider 重试后仍失败时，后端会尝试切换到同用户其它 active/openai-compatible provider，并写入 `provider_fallback` 事件。一次发送会同步创建 `agent_turns`，成功响应里的 `turn_id` 可用于查看本轮 Agent 执行轨迹。
 
 查看本轮 Agent 执行事件：
 

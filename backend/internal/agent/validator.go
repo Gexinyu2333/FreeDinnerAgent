@@ -47,6 +47,47 @@ func ValidateAction(raw string, tools []ToolDescriptor) (Action, ValidationResul
 	return action, ValidationResult{Passed: true, Repaired: repaired, RepairOutput: repairedOutput}
 }
 
+func ValidateFinalAnswerContract(answer string, observations []Observation) ValidationResult {
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return ValidationResult{Passed: false, Reason: "final_answer requires answer"}
+	}
+	if !hasFailedObservation(observations) {
+		return ValidationResult{Passed: true}
+	}
+	lower := strings.ToLower(answer)
+	successClaims := []string{
+		"已完成",
+		"已经完成",
+		"已创建",
+		"已经创建",
+		"已保存",
+		"已经保存",
+		"已发送",
+		"已经发送",
+		"done",
+		"created",
+		"saved",
+		"sent",
+		"successfully",
+	}
+	for _, claim := range successClaims {
+		if strings.Contains(lower, strings.ToLower(claim)) {
+			return ValidationResult{Passed: false, Reason: "final answer claims success after failed observation"}
+		}
+	}
+	return ValidationResult{Passed: true}
+}
+
+func hasFailedObservation(observations []Observation) bool {
+	for _, observation := range observations {
+		if observation.Failed {
+			return true
+		}
+	}
+	return false
+}
+
 func parseAction(raw string) (Action, bool, string, error) {
 	trimmed := strings.TrimSpace(raw)
 	var action Action

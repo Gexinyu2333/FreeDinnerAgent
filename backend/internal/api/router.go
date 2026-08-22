@@ -1,34 +1,36 @@
 package api
 
 import (
-	"context"
 	"net/http"
-
-	"freedinner/backend/internal/auth"
-	channelsvc "freedinner/backend/internal/channel"
-	"freedinner/backend/internal/config"
-	"freedinner/backend/internal/contextmgr"
-	"freedinner/backend/internal/knowledge"
-	"freedinner/backend/internal/llm"
-	marketsvc "freedinner/backend/internal/market"
-	memorysvc "freedinner/backend/internal/memory"
-	"freedinner/backend/internal/scheduler"
-	"freedinner/backend/internal/secret"
-	"freedinner/backend/internal/store"
-	toolsvc "freedinner/backend/internal/tool"
-	workspacesvc "freedinner/backend/internal/workspace"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Dependencies struct {
-	Config config.Config
-	DB     *pgxpool.Pool
+type RouterConfig struct {
+	AppEnv    string
+	JWTSecret string
+	DB        *pgxpool.Pool
+	Handlers  Handlers
 }
 
-func NewRouter(deps Dependencies) http.Handler {
-	if deps.Config.AppEnv == "production" {
+type Handlers struct {
+	Auth         *AuthHandler
+	Settings     *SettingsHandler
+	Conversation *ConversationHandler
+	Context      *ContextHandler
+	Harness      *HarnessHandler
+	Knowledge    *KnowledgeHandler
+	Memory       *MemoryHandler
+	Market       *MarketHandler
+	Tool         *ToolHandler
+	ScheduledJob *ScheduledJobHandler
+	Channel      *ChannelHandler
+	Workspace    *WorkspaceHandler
+}
+
+func NewRouter(cfg RouterConfig) http.Handler {
+	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -37,132 +39,32 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Use(RequestLogger())
 	router.Use(CORS())
 
-	router.GET("/healthz", healthHandler(deps))
-
-	userStore := store.NewUserStore(deps.DB)
-	sessionStore := store.NewSessionStore(deps.DB)
-	authService := auth.NewService(userStore, sessionStore, deps.Config.JWTSecret)
-	authHandler := NewAuthHandler(authService)
-	agentConfigStore := store.NewAgentConfigStore(deps.DB)
-	modelProviderStore := store.NewModelProviderStore(deps.DB)
-	settingsHandler := NewSettingsHandler(agentConfigStore, modelProviderStore, secret.NewCrypto(deps.Config.APIKeyEncryptionKey))
-	conversationStore := store.NewConversationStore(deps.DB)
-	llmUsageStore := store.NewLLMUsageStore(deps.DB)
-	harnessStore := store.NewHarnessStore(deps.DB)
-	harnessHandler := NewHarnessHandler(harnessStore)
-	contextStore := store.NewContextStore(deps.DB)
-	contextBuilder := contextmgr.NewBuilder(contextStore)
-	contextCompressor := contextmgr.NewCompressor(contextStore)
-	marketStore := store.NewMarketStore(deps.DB)
-	marketService := marketsvc.NewService(marketStore, agentConfigStore)
-	marketHandler := NewMarketHandler(marketService)
-	knowledgeStore := store.NewKnowledgeStore(deps.DB)
-	memoryStore := store.NewMemoryStore(deps.DB)
-	taskStore := store.NewTaskStore(deps.DB)
-	scheduledJobStore := store.NewScheduledJobStore(deps.DB)
-	toolStore := store.NewToolStore(deps.DB)
-	channelStore := store.NewChannelStore(deps.DB)
-	workspaceStore := store.NewWorkspaceStore(deps.DB)
-	crypto := secret.NewCrypto(deps.Config.APIKeyEncryptionKey)
-	contextHandler := NewContextHandler(conversationStore, contextCompressor)
-	knowledgeService := knowledge.NewService(knowledgeStore, agentConfigStore, modelProviderStore, crypto, llm.NewOpenAIClient())
-	knowledgeHandler := NewKnowledgeHandler(knowledgeService)
-	memoryManager := memorysvc.NewManager(memoryStore, semanticMemoryAdapter{knowledge: knowledgeService})
-	memoryHandler := NewMemoryHandler(memoryStore, memoryManager)
-	workspaceService := workspacesvc.NewService(workspaceStore, deps.Config.WorkspaceRoot, workspacesvc.RunnerOptions{
-		DockerBinary: deps.Config.WorkspaceDockerBinary,
-		PodmanBinary: deps.Config.WorkspacePodmanBinary,
-		NsJailBinary: deps.Config.WorkspaceNsJailBinary,
-		SandboxImage: deps.Config.WorkspaceSandboxImage,
-	})
-	workspaceHandler := NewWorkspaceHandler(workspaceService)
-	toolService := toolsvc.NewService(toolStore, agentConfigStore, taskStore, memoryStore, knowledgeService, workspaceService)
-	_ = toolService.EnsureBuiltins(context.Background())
-	toolHandler := NewToolHandler(toolService)
-	llmService := llm.NewService(conversationStore, agentConfigStore, modelProviderStore, llmUsageStore, harnessStore, contextBuilder, contextCompressor, marketStore, memoryManager, toolService, crypto, llm.NewOpenAIClient())
-	conversationHandler := NewConversationHandler(conversationStore, llmService)
-	schedulerService := scheduler.NewService(scheduledJobStore, conversationStore, llmService)
-	scheduledJobHandler := NewScheduledJobHandler(schedulerService)
-	channelService := channelsvc.NewService(channelStore, conversationStore, crypto, llmService)
-	_ = channelService.EnsureBuiltins(context.Background())
-	channelHandler := NewChannelHandler(channelService)
+	router.GET("/healthz", healthHandler(cfg.AppEnv, cfg.DB))
 
 	v1 := router.Group("/api/v1")
-	v1.GET("/healthz", healthHandler(deps))
-	v1.POST("/auth/register", authHandler.Register)
-	v1.POST("/auth/login", authHandler.Login)
-	v1.POST("/channels/:connection_id/webhook", channelHandler.Webhook)
+	v1.GET("/healthz", healthHandler(cfg.AppEnv, cfg.DB))
+	registerPublicRoutes(v1, cfg.Handlers)
 
 	authenticated := v1.Group("")
-	authenticated.Use(AuthMiddleware(deps.Config.JWTSecret))
-	authenticated.GET("/me", authHandler.Me)
-	authenticated.GET("/me/agent-config", settingsHandler.GetAgentConfig)
-	authenticated.PATCH("/me/agent-config", settingsHandler.UpdateAgentConfig)
-	authenticated.GET("/me/model-providers", settingsHandler.ListModelProviders)
-	authenticated.POST("/me/model-providers", settingsHandler.CreateModelProvider)
-	authenticated.PATCH("/me/model-providers/:provider_id", settingsHandler.UpdateModelProvider)
-	authenticated.DELETE("/me/model-providers/:provider_id", settingsHandler.DeleteModelProvider)
-	authenticated.POST("/conversations", conversationHandler.Create)
-	authenticated.GET("/conversations", conversationHandler.List)
-	authenticated.GET("/conversations/:conversation_id/messages", conversationHandler.Messages)
-	authenticated.POST("/conversations/:conversation_id/messages", conversationHandler.SendMessage)
-	authenticated.POST("/conversations/:conversation_id/compress", contextHandler.ManualCompress)
-	authenticated.GET("/conversations/:conversation_id/agent-events", harnessHandler.Events)
-	authenticated.GET("/conversations/:conversation_id/agent-turns/:turn_id", harnessHandler.Turn)
-	authenticated.GET("/conversations/:conversation_id/agent-turns/:turn_id/loop-steps", harnessHandler.LoopSteps)
-	authenticated.POST("/knowledge-documents", knowledgeHandler.Ingest)
-	authenticated.GET("/knowledge-documents", knowledgeHandler.ListDocuments)
-	authenticated.GET("/knowledge-search", knowledgeHandler.Search)
-	authenticated.GET("/memory-types", memoryHandler.Types)
-	authenticated.POST("/profile-memories", memoryHandler.CreateProfileMemory)
-	authenticated.GET("/profile-memories", memoryHandler.ListProfileMemories)
-	authenticated.GET("/profile-memory-search", memoryHandler.SearchProfileMemories)
-	authenticated.GET("/memory-context", memoryHandler.Context)
-	authenticated.GET("/marketplace-items", marketHandler.ListItems)
-	authenticated.POST("/marketplace-items/:item_id/install", marketHandler.Install)
-	authenticated.POST("/marketplace-items/:item_id/rate", marketHandler.Rate)
-	authenticated.POST("/capability-installs/:install_id/enable", marketHandler.EnableInstall)
-	authenticated.POST("/capability-installs/:install_id/disable", marketHandler.DisableInstall)
-	authenticated.POST("/agent-capability-bindings", marketHandler.Bind)
-	authenticated.POST("/agent-capability-bindings/:binding_id/enable", marketHandler.EnableBinding)
-	authenticated.POST("/agent-capability-bindings/:binding_id/disable", marketHandler.DisableBinding)
-	authenticated.POST("/system-prompt-templates", marketHandler.CreatePromptTemplate)
-	authenticated.POST("/system-prompt-templates/preview", marketHandler.PreviewPromptTemplate)
-	authenticated.GET("/tools", toolHandler.List)
-	authenticated.POST("/tools/:tool_name/call", toolHandler.Execute)
-	authenticated.GET("/conversations/:conversation_id/tool-calls", toolHandler.ConversationCalls)
-	authenticated.GET("/tool-calls/:tool_call_id", toolHandler.Call)
-	authenticated.POST("/tool-approval-requests/:approval_id/approve", toolHandler.Approve)
-	authenticated.POST("/tool-approval-requests/:approval_id/reject", toolHandler.Reject)
-	authenticated.POST("/scheduled-agent-jobs", scheduledJobHandler.Create)
-	authenticated.GET("/scheduled-agent-jobs", scheduledJobHandler.List)
-	authenticated.GET("/scheduled-agent-job-templates", scheduledJobHandler.Templates)
-	authenticated.PATCH("/scheduled-agent-jobs/:job_id", scheduledJobHandler.Update)
-	authenticated.POST("/scheduled-agent-jobs/:job_id/pause", scheduledJobHandler.Pause)
-	authenticated.POST("/scheduled-agent-jobs/:job_id/resume", scheduledJobHandler.Resume)
-	authenticated.DELETE("/scheduled-agent-jobs/:job_id", scheduledJobHandler.Delete)
-	authenticated.GET("/scheduled-agent-jobs/:job_id/runs", scheduledJobHandler.Runs)
-	authenticated.POST("/scheduled-agent-jobs/:job_id/run-now", scheduledJobHandler.RunNow)
-	authenticated.GET("/scheduled-agent-job-runs/:run_id", scheduledJobHandler.Run)
-	authenticated.GET("/channel-providers", channelHandler.Providers)
-	authenticated.POST("/me/channel-connections", channelHandler.CreateConnection)
-	authenticated.GET("/me/channel-connections", channelHandler.Connections)
-	authenticated.PATCH("/me/channel-connections/:connection_id/policies", channelHandler.UpsertPolicy)
-	authenticated.GET("/me/channel-connections/:connection_id/external-conversations", channelHandler.ExternalConversations)
-	authenticated.GET("/me/channel-connections/:connection_id/inbox-events", channelHandler.InboxEvents)
-	authenticated.GET("/me/channel-connections/:connection_id/outbox-messages", channelHandler.OutboxMessages)
-	authenticated.POST("/channel-outbox-messages/:outbox_id/approve", channelHandler.ApproveOutbox)
-	authenticated.POST("/channel-outbox-messages/:outbox_id/cancel", channelHandler.CancelOutbox)
-	authenticated.POST("/channel-outbox-messages/:outbox_id/send", channelHandler.SendOutbox)
-	authenticated.GET("/me/workspace", workspaceHandler.Status)
-	authenticated.POST("/me/workspace", workspaceHandler.Enable)
-	authenticated.PATCH("/me/workspace", workspaceHandler.UpdatePolicy)
-	authenticated.DELETE("/me/workspace", workspaceHandler.Destroy)
-	authenticated.GET("/me/workspace/files", workspaceHandler.ListFiles)
-	authenticated.GET("/me/workspace/files/content", workspaceHandler.ReadFile)
-	authenticated.PUT("/me/workspace/files/content", workspaceHandler.WriteFile)
-	authenticated.POST("/me/workspace/commands", workspaceHandler.RunCommand)
-	authenticated.GET("/me/workspace/commands", workspaceHandler.CommandRuns)
+	authenticated.Use(AuthMiddleware(cfg.JWTSecret))
+	registerAuthenticatedRoutes(authenticated, cfg.Handlers)
 
 	return router
+}
+
+func registerPublicRoutes(router *gin.RouterGroup, h Handlers) {
+	router.POST("/auth/register", h.Auth.Register)
+	router.POST("/auth/login", h.Auth.Login)
+	router.POST("/channels/:connection_id/webhook", h.Channel.Webhook)
+}
+
+func registerAuthenticatedRoutes(router *gin.RouterGroup, h Handlers) {
+	registerUserSettingsRoutes(router, h)
+	registerConversationRoutes(router, h)
+	registerKnowledgeMemoryRoutes(router, h)
+	registerMarketRoutes(router, h)
+	registerToolRoutes(router, h)
+	registerScheduledJobRoutes(router, h)
+	registerChannelRoutes(router, h)
+	registerWorkspaceRoutes(router, h)
 }
