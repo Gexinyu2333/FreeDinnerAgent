@@ -1,0 +1,121 @@
+{
+  "app": {
+    "subtitle": "Personal Agent Console",
+    "backendReady": "Backend flow is ready"
+  },
+  "auth": {
+    "heroEyebrow": "FreeDinnerAgent",
+    "heroTitle": "Bring your agent, memory, tools, and channels into one console.",
+    "heroDescription": "Start with auth, configuration, and Web Chat, then grow into memory, scheduled jobs, QQ channels, and workspace actions.",
+    "localFirstHint": "Development backend: http://localhost:8080",
+    "logout": "Log out",
+    "fields": {
+      "username": "Username",
+      "usernamePlaceholder": "Enter username",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Enter display name",
+      "password": "Password",
+      "passwordPlaceholder": "Enter password"
+    },
+    "login": {
+      "title": "Log in",
+      "description": "Enter your personal Agent console.",
+      "submit": "Log in",
+      "noAccount": "No account yet?",
+      "createAccount": "Create one"
+    },
+    "register": {
+      "title": "Register",
+      "description": "Create a local test user for models, memory, and tools.",
+      "submit": "Register",
+      "hasAccount": "Already have an account?",
+      "backToLogin": "Back to log in"
+    }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "empty": "No content",
+    "loading": "Loading",
+    "mvpShellReady": "MVP page shell is ready",
+    "pageWillBeImplemented": "This page will connect to real APIs and workflows in later steps. Step F1 focuses on routing, layout, and foundation state.",
+    "save": "Save",
+    "stepF1": "Step F1"
+  },
+  "layout": {
+    "language": "Language",
+    "openMenu": "Open menu",
+    "searchPlaceholder": "Search conversations, tools, and memories"
+  },
+  "locale": {
+    "enUS": "English",
+    "zhCN": "中文"
+  },
+  "nav": {
+    "agent": "Agent",
+    "channels": "Channels",
+    "chat": "Chat",
+    "knowledge": "Knowledge",
+    "logs": "Logs",
+    "market": "Market",
+    "memory": "Memory",
+    "providers": "Providers",
+    "tasks": "Tasks",
+    "tools": "Tools",
+    "workspace": "Workspace"
+  },
+  "pages": {
+    "agent": {
+      "title": "Agent Config",
+      "description": "Configure system prompts, model behavior, memory, tool approvals, and extra LLM features."
+    },
+    "channelDetail": {
+      "title": "Channel Detail",
+      "description": "Inspect a channel's listening conversation, inbox, outbox, and policy."
+    },
+    "channels": {
+      "title": "Channels",
+      "description": "Manage NapCatQQ / OneBot channels so the Agent can listen and respond outside the web app."
+    },
+    "chat": {
+      "title": "Web Chat",
+      "description": "User-initiated conversations that trigger the Agent Loop, tool calls, and memory retrieval."
+    },
+    "chatDetail": {
+      "title": "Conversation Detail",
+      "description": "Inspect messages, Agent events, tool calls, and context compression records."
+    },
+    "knowledge": {
+      "title": "Knowledge Base",
+      "description": "Manage document chunks, embedding status, and keyword / vector retrieval."
+    },
+    "logs": {
+      "title": "Logs",
+      "description": "Review Agent events, tool calls, channel events, and scheduled job runs."
+    },
+    "market": {
+      "title": "Capability Market",
+      "description": "Browse, install, and bind tools, skills, MCP entries, channel adapters, and system prompts."
+    },
+    "memory": {
+      "title": "Memory",
+      "description": "Review Profile Memory, Memory Context, and Dreaming Insights."
+    },
+    "providers": {
+      "title": "Model Providers",
+      "description": "Configure OpenAI-compatible / Anthropic-compatible model URLs, API keys, and defaults."
+    },
+    "tasks": {
+      "title": "Scheduled Jobs",
+      "description": "Create daily briefs, weekly reviews, follow-up monitors, and inspect runs."
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "Inspect the Tool Registry, test tool calls, and handle approval requests."
+    },
+    "workspace": {
+      "title": "Workspace",
+      "description": "Manage the user workspace, file operations, and constrained command execution."
+    }
+  }
+}

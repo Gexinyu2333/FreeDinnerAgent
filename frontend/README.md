@@ -2,12 +2,21 @@
 
 本目录用于存放 FreeDinnerAgent 的 React 前端项目。
 
+详细设计与分阶段实现计划见：
+
+- [../docs/frontend-design-plan.md](../docs/frontend-design-plan.md)
+
 计划技术栈：
 
 - React
 - TypeScript
 - Vite
-- CSS Modules 或 Tailwind CSS
+- React Router
+- TanStack Query
+- Zustand
+- Tailwind CSS
+- lucide-react
+- react-i18next
 
 主要页面规划：
 

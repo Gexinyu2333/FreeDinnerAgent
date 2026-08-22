@@ -1,0 +1,121 @@
+{
+  "app": {
+    "subtitle": "个人 Agent 控制台",
+    "backendReady": "后端链路已就绪"
+  },
+  "auth": {
+    "heroEyebrow": "FreeDinnerAgent",
+    "heroTitle": "把你的 Agent、记忆、工具和入口收进一个控制台。",
+    "heroDescription": "先从登录、配置和 Web Chat 跑通，再逐步接入记忆、心跳任务、QQ 入口和 Workspace。",
+    "localFirstHint": "开发期默认连接本地后端：http://localhost:8080",
+    "logout": "退出",
+    "fields": {
+      "username": "用户名",
+      "usernamePlaceholder": "输入用户名",
+      "displayName": "显示名",
+      "displayNamePlaceholder": "输入显示名",
+      "password": "密码",
+      "passwordPlaceholder": "输入密码"
+    },
+    "login": {
+      "title": "登录",
+      "description": "进入你的个人 Agent 控制台。",
+      "submit": "登录",
+      "noAccount": "还没有账号？",
+      "createAccount": "创建账号"
+    },
+    "register": {
+      "title": "注册",
+      "description": "创建一个本地测试用户，后续用于绑定模型、记忆和工具。",
+      "submit": "注册",
+      "hasAccount": "已有账号？",
+      "backToLogin": "返回登录"
+    }
+  },
+  "common": {
+    "cancel": "取消",
+    "close": "关闭",
+    "empty": "暂无内容",
+    "loading": "加载中",
+    "mvpShellReady": "MVP 页面骨架已就绪",
+    "pageWillBeImplemented": "这个页面会在后续 Step 中接入真实接口和交互。当前阶段先完成路由、布局和基础状态。",
+    "save": "保存",
+    "stepF1": "Step F1"
+  },
+  "layout": {
+    "language": "语言",
+    "openMenu": "打开菜单",
+    "searchPlaceholder": "搜索会话、工具、记忆"
+  },
+  "locale": {
+    "enUS": "English",
+    "zhCN": "中文"
+  },
+  "nav": {
+    "agent": "Agent",
+    "channels": "Channels",
+    "chat": "Chat",
+    "knowledge": "Knowledge",
+    "logs": "Logs",
+    "market": "Market",
+    "memory": "Memory",
+    "providers": "Providers",
+    "tasks": "Tasks",
+    "tools": "Tools",
+    "workspace": "Workspace"
+  },
+  "pages": {
+    "agent": {
+      "title": "Agent 配置",
+      "description": "配置系统提示词、模型参数、记忆、工具审批和额外 LLM 功能。"
+    },
+    "channelDetail": {
+      "title": "Channel 详情",
+      "description": "查看某个外部入口的监听会话、inbox、outbox 和策略。"
+    },
+    "channels": {
+      "title": "Channel 入口",
+      "description": "管理 NapCatQQ / OneBot 等外部入口，让 Agent 可以监听和回复外部消息。"
+    },
+    "chat": {
+      "title": "Web Chat",
+      "description": "用户主动发起对话，触发 Agent Loop、工具调用和记忆检索。"
+    },
+    "chatDetail": {
+      "title": "对话详情",
+      "description": "查看消息、Agent 事件、工具调用和上下文压缩记录。"
+    },
+    "knowledge": {
+      "title": "Knowledge Base",
+      "description": "管理文档切片、embedding 状态和关键词 / 向量检索。"
+    },
+    "logs": {
+      "title": "Logs",
+      "description": "聚合查看 Agent events、Tool calls、Channel events 和任务运行记录。"
+    },
+    "market": {
+      "title": "能力市场",
+      "description": "浏览、安装、绑定 Tool、Skill、MCP、Channel Adapter 和系统提示词。"
+    },
+    "memory": {
+      "title": "Memory",
+      "description": "查看 Profile Memory、Memory Context 和 Dreaming Insight。"
+    },
+    "providers": {
+      "title": "模型 Providers",
+      "description": "配置 OpenAI-compatible / Anthropic-compatible 的模型 URL、API Key 和默认模型。"
+    },
+    "tasks": {
+      "title": "心跳任务",
+      "description": "创建每日简报、每周回顾和跟进监控，并查看运行记录。"
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "查看 Tool Registry、手动测试工具调用，并处理审批请求。"
+    },
+    "workspace": {
+      "title": "Workspace",
+      "description": "管理用户级工作目录、文件读写和受限命令执行。"
+    }
+  }
+}
