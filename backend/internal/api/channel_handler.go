@@ -140,6 +140,16 @@ func (h *ChannelHandler) UpsertPolicy(c *gin.Context) {
 	OK(c, policy)
 }
 
+func (h *ChannelHandler) Policies(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	policies, err := h.channels.ListPolicies(c.Request.Context(), userID, c.Param("connection_id"))
+	writeChannelList(c, policies, err)
+}
+
 func (h *ChannelHandler) Webhook(c *gin.Context) {
 	secret := c.GetHeader("X-FreeDinner-Webhook-Secret")
 	if secret == "" {

@@ -63,7 +63,7 @@ func (s *MemoryStore) ListDreamingInsights(ctx context.Context, userID string, s
 		return nil, err
 	}
 	defer rows.Close()
-	var insights []DreamingInsight
+	insights := make([]DreamingInsight, 0)
 	for rows.Next() {
 		insight, err := scanDreamingInsight(rows)
 		if err != nil {

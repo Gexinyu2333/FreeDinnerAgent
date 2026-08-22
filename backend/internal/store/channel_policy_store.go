@@ -51,3 +51,31 @@ func (s *ChannelStore) FindPolicy(ctx context.Context, connectionID, scopeType s
 			AND status = 'active'
 	`, connectionID, scopeType, externalScopeID))
 }
+
+func (s *ChannelStore) ListPolicies(ctx context.Context, userID, connectionID string) ([]ChannelPolicy, error) {
+	if _, err := s.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT id, user_id, channel_connection_id, scope_type, external_scope_id, mode,
+			trigger_keywords, allow_memory_write, allow_tool_use, require_approval_for_outbound,
+			rate_limit_per_minute, quiet_hours, status, metadata, created_at, updated_at
+		FROM channel_policies
+		WHERE user_id = $1 AND channel_connection_id = $2 AND status = 'active'
+		ORDER BY scope_type ASC, external_scope_id ASC NULLS FIRST, created_at ASC
+	`, userID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	policies := make([]ChannelPolicy, 0)
+	for rows.Next() {
+		policy, err := scanChannelPolicy(rows)
+		if err != nil {
+			return nil, err
+		}
+		policies = append(policies, policy)
+	}
+	return policies, rows.Err()
+}

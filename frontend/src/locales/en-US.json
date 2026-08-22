@@ -17,10 +17,14 @@
       "password": "Password",
       "passwordPlaceholder": "Enter password"
     },
+    "errors": {
+      "unexpected": "Request failed. Please try again later."
+    },
     "login": {
       "title": "Log in",
       "description": "Enter your personal Agent console.",
       "submit": "Log in",
+      "submitting": "Logging in",
       "noAccount": "No account yet?",
       "createAccount": "Create one"
     },
@@ -28,6 +32,7 @@
       "title": "Register",
       "description": "Create a local test user for models, memory, and tools.",
       "submit": "Register",
+      "submitting": "Registering",
       "hasAccount": "Already have an account?",
       "backToLogin": "Back to log in"
     }
@@ -35,12 +40,555 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
     "empty": "No content",
     "loading": "Loading",
     "mvpShellReady": "MVP page shell is ready",
     "pageWillBeImplemented": "This page will connect to real APIs and workflows in later steps. Step F1 focuses on routing, layout, and foundation state.",
+    "disabled": "Disabled",
+    "enabled": "Enabled",
+    "reset": "Reset",
+    "refresh": "Refresh",
     "save": "Save",
+    "saving": "Saving",
+    "search": "Search",
     "stepF1": "Step F1"
+  },
+  "memory": {
+    "description": "Maintain profile memories, inspect what context retrieval injects, and handle Dreaming candidate insights.",
+    "title": "Memory",
+    "errors": {
+      "operationFailed": "Memory operation failed"
+    },
+    "tabs": {
+      "context": "Context",
+      "dreaming": "Dreaming",
+      "profile": "Profile"
+    },
+    "scope": {
+      "conversation": "Conversation",
+      "global": "Global",
+      "project": "Project"
+    },
+    "profile": {
+      "allTypes": "All memory types",
+      "confidence": "Confidence {{value}}",
+      "create": "Add memory",
+      "created": "Profile Memory added",
+      "creating": "Adding",
+      "formTitle": "New Profile Memory",
+      "importance": "Importance {{value}}",
+      "searchMode": "{{mode}} search",
+      "searchPlaceholder": "Search preferences, facts, goals, or long-term constraints",
+      "empty": {
+        "description": "Add a preference or long-term fact so the Agent can retrieve it later.",
+        "title": "No Profile Memory yet"
+      },
+      "fields": {
+        "confidence": "Confidence",
+        "content": "Content",
+        "evidence": "Evidence or source",
+        "importance": "Importance",
+        "memoryType": "Memory type",
+        "scope": "Scope",
+        "title": "Title"
+      }
+    },
+    "context": {
+      "retrieve": "Retrieve context",
+      "score": "Score {{value}}",
+      "semanticMode": "Semantic {{mode}}",
+      "tokenCount": "{{count}} tokens",
+      "tokens": "{{count}} tokens",
+      "empty": {
+        "description": "This query did not match any memories that can be injected into context.",
+        "title": "No retrieval results"
+      },
+      "fields": {
+        "conversationId": "Conversation ID",
+        "query": "Query",
+        "semantic": "Semantic Memory"
+      }
+    },
+    "dreaming": {
+      "apply": "Apply",
+      "confidence": "Confidence {{value}}",
+      "reject": "Reject",
+      "empty": {
+        "description": "The Dreaming background flow has not produced pending insights yet.",
+        "title": "No Dreaming Insights"
+      },
+      "status": {
+        "all": "All",
+        "applied": "Applied",
+        "pending": "Pending",
+        "rejected": "Rejected"
+      }
+    }
+  },
+  "knowledge": {
+    "chunkIndex": "Chunk {{index}}",
+    "description": "Create text knowledge, store chunks, and use keyword or vector retrieval according to the Agent embedding switch.",
+    "similarity": "Similarity {{value}}",
+    "title": "Knowledge Base",
+    "tokens": "{{count}} tokens",
+    "unknownDocument": "Unknown document",
+    "errors": {
+      "operationFailed": "Knowledge operation failed"
+    },
+    "documents": {
+      "title": "Documents",
+      "empty": {
+        "description": "Add text knowledge first, then search it to verify keyword or vector retrieval.",
+        "title": "No knowledge documents yet"
+      }
+    },
+    "fields": {
+      "content": "Text content",
+      "sourceType": "Source type",
+      "sourceURI": "Source URI",
+      "title": "Title",
+      "visibility": "Visibility"
+    },
+    "ingest": {
+      "create": "Create document",
+      "created": "Created document with {{chunks}} chunks. Embedding status: {{status}}",
+      "creating": "Creating",
+      "formTitle": "New knowledge document"
+    },
+    "search": {
+      "placeholder": "Search knowledge content",
+      "results": "Search results",
+      "empty": {
+        "description": "Try a different query, or confirm the document contains matching text.",
+        "title": "No search results"
+      }
+    },
+    "sourceTypes": {
+      "manual": "Manual",
+      "note": "Note",
+      "upload": "Upload",
+      "url": "URL"
+    },
+    "visibility": {
+      "private": "Private",
+      "public": "Public"
+    }
+  },
+  "tools": {
+    "description": "Inspect the Tool Registry and resolve tool-call approvals that require user confirmation.",
+    "title": "Tools",
+    "errors": {
+      "operationFailed": "Tool operation failed"
+    },
+    "registry": {
+      "empty": {
+        "description": "Built-in tools are registered when the backend starts. If this is empty, check Tool Registry initialization.",
+        "title": "No tools yet"
+      },
+      "requiresApproval": "Requires approval",
+      "title": "Tool Registry",
+      "version": "v{{version}}"
+    },
+    "approvals": {
+      "approve": "Approve",
+      "empty": {
+        "description": "There are no tool approval requests for the current filter.",
+        "title": "No approval requests"
+      },
+      "reject": "Reject",
+      "title": "Approval Requests",
+      "status": {
+        "all": "All",
+        "approved": "Approved",
+        "pending": "Pending",
+        "rejected": "Rejected"
+      }
+    }
+  },
+  "market": {
+    "bind": "Bind to Agent",
+    "bound": "Capability bound to Agent",
+    "description": "Browse, install, and bind tools, skills, MCP servers, knowledge bases, channel adapters, and system prompts.",
+    "disable": "Disable",
+    "enable": "Enable",
+    "install": "Install",
+    "installCount": "{{formattedCount}} installs",
+    "installedOnly": "Installed only",
+    "rating": "Rating {{rating}}",
+    "title": "Capability Market",
+    "empty": {
+      "description": "No visible capabilities match this filter. You can create a private system prompt template first.",
+      "title": "No marketplace items"
+    },
+    "errors": {
+      "operationFailed": "Market operation failed"
+    },
+    "itemTypes": {
+      "all": "All types",
+      "channelAdapter": "Channel Adapter",
+      "knowledgeBase": "Knowledge Base",
+      "mcpServer": "MCP Server",
+      "skill": "Skill",
+      "systemPrompt": "System Prompt",
+      "tool": "Tool"
+    },
+    "tabs": {
+      "browse": "Browse",
+      "systemPrompt": "System Prompt"
+    },
+    "visibility": {
+      "private": "Private",
+      "public": "Public"
+    },
+    "prompt": {
+      "bindVersion": "Bind this version",
+      "create": "Create template",
+      "created": "System prompt template created",
+      "createTitle": "New system prompt template",
+      "creating": "Creating",
+      "fork": "Fork",
+      "preview": "Preview",
+      "previewTitle": "Preview / Fork / Bind",
+      "tokens": "{{count}} tokens",
+      "fields": {
+        "category": "Category",
+        "content": "Template content",
+        "description": "Description",
+        "displayName": "Display name",
+        "forkName": "Fork name",
+        "name": "Unique name",
+        "override": "User override",
+        "previewVariables": "Variable values JSON",
+        "tags": "Tags, comma separated",
+        "variables": "Variable definition JSON array",
+        "versionId": "Version ID",
+        "visibility": "Visibility"
+      }
+    }
+  },
+  "tasks": {
+    "created": "Scheduled job created",
+    "deleteConfirm": "Delete {{title}}?",
+    "description": "Create daily briefs, weekly reviews, and follow-up monitors, then inspect every run.",
+    "runNowQueued": "Run Now finished with status: {{status}}",
+    "title": "Scheduled Jobs",
+    "errors": {
+      "operationFailed": "Scheduled job operation failed"
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "runNow": "Run Now"
+    },
+    "delivery": {
+      "channel": "External channel",
+      "inApp": "In app"
+    },
+    "fields": {
+      "contextPolicy": "Context Policy JSON",
+      "cron": "Cron expression",
+      "deliveryChannel": "Delivery channel",
+      "description": "Description",
+      "jobType": "Job type",
+      "localTime": "Local time",
+      "prompt": "Prompt template",
+      "scheduleKind": "Schedule kind",
+      "timezone": "Timezone",
+      "title": "Title",
+      "toolPolicy": "Tool Policy JSON",
+      "visibility": "Visibility",
+      "weekdays": "Weekdays"
+    },
+    "form": {
+      "create": "Create scheduled job",
+      "creating": "Creating",
+      "title": "New job"
+    },
+    "jobs": {
+      "failures": "{{count}} failures",
+      "noNextRun": "No next run",
+      "nextRun": "Next: {{time}}",
+      "title": "Jobs",
+      "empty": {
+        "description": "Create a daily brief or weekly review from a template, then use Run Now.",
+        "title": "No scheduled jobs yet"
+      }
+    },
+    "runs": {
+      "selectRun": "Select a run to inspect details.",
+      "title": "Runs",
+      "titleForJob": "Runs for {{title}}",
+      "empty": {
+        "description": "This job has no runs yet. Click Run Now to create one.",
+        "title": "No runs yet"
+      },
+      "noJob": {
+        "description": "Select a scheduled job to see its run history.",
+        "title": "No job selected"
+      },
+      "fields": {
+        "conversation": "Conversation",
+        "finishedAt": "Finished",
+        "scheduledFor": "Scheduled for",
+        "startedAt": "Started"
+      }
+    },
+    "schedule": {
+      "cron": "Cron",
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
+    "status": {
+      "active": "Active",
+      "all": "All",
+      "paused": "Paused"
+    },
+    "templates": {
+      "title": "Suggested templates",
+      "use": "Use"
+    },
+    "visibility": {
+      "private": "Private",
+      "public": "Public"
+    },
+    "weekdays": {
+      "1": "M",
+      "2": "T",
+      "3": "W",
+      "4": "T",
+      "5": "F",
+      "6": "S",
+      "7": "S"
+    }
+  },
+  "channels": {
+    "configured": "Configured",
+    "description": "Manage QQ / NapCat / OneBot-style external channels, including listening policy, inbox events, and outbound drafts.",
+    "title": "Channels",
+    "unconfigured": "Not configured",
+    "errors": {
+      "invalidJson": "JSON must be a valid object",
+      "operationFailed": "Channel operation failed"
+    },
+    "providers": {
+      "empty": "No channel providers available",
+      "title": "Providers"
+    },
+    "connection": {
+      "create": "Create connection",
+      "created": "Channel connection created",
+      "displayName": "Display name",
+      "externalAccountId": "External account ID",
+      "externalAccountName": "External account name",
+      "lastEventAt": "Last event",
+      "noExternalAccount": "No external account",
+      "provider": "Provider"
+    },
+    "connections": {
+      "title": "Connections",
+      "empty": {
+        "description": "Create a NapCatQQ / OneBot connection, then configure the webhook in the external channel.",
+        "title": "No channel connections yet"
+      }
+    },
+    "detail": {
+      "empty": {
+        "description": "Create or select a connection to configure policies and inspect inbox / outbox.",
+        "title": "No connection selected"
+      }
+    },
+    "tabs": {
+      "conversations": "External conversations",
+      "inbox": "Inbox",
+      "outbox": "Outbox"
+    },
+    "policy": {
+      "allowMemoryWrite": "Allow memory writes",
+      "allowToolUse": "Allow tool use",
+      "current": "Current policies",
+      "empty": "No policies yet. Creating a connection will add default private chat and group chat policies.",
+      "externalScopeId": "External scope ID, blank for default policy",
+      "globalScope": "Default scope",
+      "rateLimit": "{{count}} per minute",
+      "requireApprovalForOutbound": "Require approval for outbound messages",
+      "save": "Save policy",
+      "saved": "Channel policy saved",
+      "title": "Policy",
+      "triggerKeywords": "Keywords, comma or newline separated",
+      "mode": {
+        "auto_reply": "Auto reply",
+        "keyword": "Keyword",
+        "mention_only": "Mention only",
+        "off": "Off"
+      },
+      "scope": {
+        "group_chat": "Group chat",
+        "private_chat": "Private chat"
+      }
+    },
+    "inbox": {
+      "noText": "No text content",
+      "triggered": "Triggered",
+      "empty": {
+        "description": "Normalized inbox events will appear here after external webhooks arrive.",
+        "title": "No inbox events"
+      }
+    },
+    "outbox": {
+      "approve": "Approve",
+      "cancel": "Cancel",
+      "requiresApproval": "Needs approval",
+      "send": "Send",
+      "confirm": {
+        "cancel": "Cancel this outbox draft?",
+        "send": "Send this approved outbox message?"
+      },
+      "empty": {
+        "description": "Agent replies for external channels will create outbox drafts here.",
+        "title": "No outbox messages"
+      },
+      "status": {
+        "all": "All",
+        "approved": "Approved",
+        "cancelled": "Cancelled",
+        "failed": "Failed",
+        "pending": "Pending",
+        "sent": "Sent"
+      }
+    },
+    "conversations": {
+      "empty": {
+        "description": "External private chats or groups will appear here after they are bound to web conversations.",
+        "title": "No external conversations"
+      }
+    }
+  },
+  "providers": {
+    "apiKeys": "API keys",
+    "chatAPIKey": "Chat API key",
+    "chatBaseURL": "Chat Base URL",
+    "chatKeyConfigured": "Chat configured",
+    "chatKeyMissing": "Chat missing",
+    "chatModel": "Default chat model",
+    "default": "Default",
+    "deleteConfirm": "Delete {{name}}?",
+    "description": "Configure user-owned model providers, API keys, default chat models, and embedding models.",
+    "displayName": "Display name",
+    "embeddingAPIKey": "Embedding API key",
+    "embeddingBaseURL": "Embedding Base URL",
+    "embeddingKeyConfigured": "Embedding configured",
+    "embeddingKeyMissing": "Embedding missing",
+    "embeddingModel": "Default embedding model",
+    "errors": {
+      "mutationFailed": "Model provider operation failed"
+    },
+    "empty": {
+      "description": "Add an OpenAI-compatible provider such as LongCat first, then add SiliconFlow embedding when you need RAG.",
+      "title": "No model providers yet"
+    },
+    "form": {
+      "create": "Create provider",
+      "createTitle": "New provider",
+      "editTitle": "Edit provider"
+    },
+    "isDefault": "Set as default provider",
+    "keepExistingKey": "Leave blank to keep existing key",
+    "provider": "Provider type",
+    "title": "Model Providers"
+  },
+  "agent": {
+    "defaultChatProvider": "Default chat provider",
+    "description": "Configure default models, prompts, reasoning parameters, tool approvals, memory, and extra LLM features.",
+    "errors": {
+      "saveFailed": "Failed to save Agent config"
+    },
+    "features": {
+      "auto_compression_llm": "Auto context compression",
+      "curator_llm": "Memory curator",
+      "dreaming_llm": "Dreaming",
+      "shadow_validator_llm": "Shadow Validator",
+      "skill_router_llm": "Skill Router"
+    },
+    "fields": {
+      "defaultProvider": "Default provider",
+      "dreamingEnabled": "Enable Dreaming",
+      "embedPublicKnowledge": "Embed public knowledge",
+      "embeddingEnabled": "Enable embedding",
+      "embeddingMonthlyTokens": "Embedding monthly token limit",
+      "featureProvider": "Feature provider",
+      "featureTemperature": "Temperature",
+      "llmRetryLimit": "LLM retry limit",
+      "maxContextTokens": "Max context tokens",
+      "maxLoopSteps": "Max Agent Loop steps",
+      "memoryEnabled": "Enable memory",
+      "modelOverride": "Model override",
+      "name": "Agent name",
+      "semanticMemoryEnabled": "Enable Semantic Memory",
+      "systemPrompt": "System prompt",
+      "temperature": "Temperature",
+      "thinkingBudgetTokens": "Thinking token budget",
+      "thinkingEffort": "Thinking effort",
+      "thinkingEnabled": "Enable thinking",
+      "toolApprovalPolicy": "Tool approval policy",
+      "toolUseEnabled": "Enable tool calls"
+    },
+    "none": "None",
+    "saved": "Agent config saved",
+    "saving": "Saving",
+    "sections": {
+      "basic": "Basic",
+      "capabilities": "Capabilities",
+      "embedding": "Embedding cost control",
+      "features": "Extra LLM features",
+      "model": "Model and context"
+    },
+    "thinking": {
+      "high": "High",
+      "low": "Low",
+      "medium": "Medium"
+    },
+    "title": "Agent Config",
+    "toolApproval": {
+      "always": "Approve every tool",
+      "never": "Never approve",
+      "sensitiveOnly": "Sensitive tools only"
+    }
+  },
+  "chat": {
+    "composer": {
+      "disabledPlaceholder": "Create or select a conversation first",
+      "placeholder": "Type a message, press Cmd/Ctrl + Enter to send",
+      "send": "Send",
+      "sending": "Sending"
+    },
+    "empty": {
+      "noConversationTitle": "Select or create a conversation",
+      "noConversationDescription": "Your Web Chat conversations appear on the left. Create one to start talking with the Agent.",
+      "noMessagesTitle": "No messages yet",
+      "noMessagesDescription": "Send the first message and the Agent will use configuration, memory, and tool context to respond."
+    },
+    "errors": {
+      "createFailed": "Failed to create conversation",
+      "loadFailed": "Failed to load conversations",
+      "sendFailed": "Failed to send message"
+    },
+    "header": {
+      "activeDescription": "Web Chat actively triggers the Agent Loop",
+      "emptyDescription": "Create a conversation to start chatting",
+      "noConversation": "No conversation selected",
+      "waitingForAssistant": "Agent is generating a reply"
+    },
+    "sidebar": {
+      "create": "Create conversation",
+      "defaultTitle": "New conversation",
+      "emptyTitle": "No conversations",
+      "emptyDescription": "Create a conversation to get the Web Chat flow moving.",
+      "newConversationPlaceholder": "New conversation",
+      "newConversationTitle": "Conversation title",
+      "title": "Conversations"
+    }
   },
   "layout": {
     "language": "Language",

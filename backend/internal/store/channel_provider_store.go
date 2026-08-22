@@ -44,7 +44,7 @@ func (s *ChannelStore) ListProviders(ctx context.Context) ([]ChannelProviderDefi
 		return nil, err
 	}
 	defer rows.Close()
-	var providers []ChannelProviderDefinition
+	providers := make([]ChannelProviderDefinition, 0)
 	for rows.Next() {
 		provider, err := scanChannelProvider(rows)
 		if err != nil {

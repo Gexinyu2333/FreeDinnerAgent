@@ -87,7 +87,7 @@ func (s *ModelProviderStore) List(ctx context.Context, userID string) ([]ModelPr
 	}
 	defer rows.Close()
 
-	var providers []ModelProvider
+	providers := make([]ModelProvider, 0)
 	for rows.Next() {
 		provider, err := scanModelProvider(rows)
 		if err != nil {

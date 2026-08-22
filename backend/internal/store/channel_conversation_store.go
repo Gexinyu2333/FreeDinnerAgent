@@ -47,7 +47,7 @@ func (s *ChannelStore) ListExternalConversations(ctx context.Context, userID, co
 		return nil, err
 	}
 	defer rows.Close()
-	var conversations []ExternalConversation
+	conversations := make([]ExternalConversation, 0)
 	for rows.Next() {
 		conversation, err := scanExternalConversation(rows)
 		if err != nil {

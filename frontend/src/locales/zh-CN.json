@@ -17,10 +17,14 @@
       "password": "密码",
       "passwordPlaceholder": "输入密码"
     },
+    "errors": {
+      "unexpected": "请求失败，请稍后再试"
+    },
     "login": {
       "title": "登录",
       "description": "进入你的个人 Agent 控制台。",
       "submit": "登录",
+      "submitting": "登录中",
       "noAccount": "还没有账号？",
       "createAccount": "创建账号"
     },
@@ -28,6 +32,7 @@
       "title": "注册",
       "description": "创建一个本地测试用户，后续用于绑定模型、记忆和工具。",
       "submit": "注册",
+      "submitting": "注册中",
       "hasAccount": "已有账号？",
       "backToLogin": "返回登录"
     }
@@ -35,12 +40,555 @@
   "common": {
     "cancel": "取消",
     "close": "关闭",
+    "delete": "删除",
+    "edit": "编辑",
     "empty": "暂无内容",
     "loading": "加载中",
     "mvpShellReady": "MVP 页面骨架已就绪",
     "pageWillBeImplemented": "这个页面会在后续 Step 中接入真实接口和交互。当前阶段先完成路由、布局和基础状态。",
+    "disabled": "关闭",
+    "enabled": "开启",
+    "reset": "重置",
+    "refresh": "刷新",
     "save": "保存",
+    "saving": "保存中",
+    "search": "搜索",
     "stepF1": "Step F1"
+  },
+  "memory": {
+    "description": "维护画像记忆，查看一次检索会拼入哪些上下文，并处理 Dreaming 产生的候选 insight。",
+    "title": "Memory",
+    "errors": {
+      "operationFailed": "记忆操作失败"
+    },
+    "tabs": {
+      "context": "上下文",
+      "dreaming": "Dreaming",
+      "profile": "Profile"
+    },
+    "scope": {
+      "conversation": "会话",
+      "global": "全局",
+      "project": "项目"
+    },
+    "profile": {
+      "allTypes": "全部记忆类型",
+      "confidence": "置信度 {{value}}",
+      "create": "添加记忆",
+      "created": "Profile Memory 已添加",
+      "creating": "添加中",
+      "formTitle": "新增 Profile Memory",
+      "importance": "重要度 {{value}}",
+      "searchMode": "{{mode}} 检索",
+      "searchPlaceholder": "搜索偏好、事实、目标或长期约束",
+      "empty": {
+        "description": "添加一条偏好或长期事实，Agent 后续就可以在上下文里检索到它。",
+        "title": "还没有 Profile Memory"
+      },
+      "fields": {
+        "confidence": "置信度",
+        "content": "内容",
+        "evidence": "证据或来源",
+        "importance": "重要度",
+        "memoryType": "记忆类型",
+        "scope": "作用域",
+        "title": "标题"
+      }
+    },
+    "context": {
+      "retrieve": "检索上下文",
+      "score": "得分 {{value}}",
+      "semanticMode": "Semantic {{mode}}",
+      "tokenCount": "{{count}} tokens",
+      "tokens": "{{count}} tokens",
+      "empty": {
+        "description": "当前查询没有匹配到可拼入上下文的记忆。",
+        "title": "没有检索结果"
+      },
+      "fields": {
+        "conversationId": "Conversation ID",
+        "query": "查询",
+        "semantic": "Semantic Memory"
+      }
+    },
+    "dreaming": {
+      "apply": "应用",
+      "confidence": "置信度 {{value}}",
+      "reject": "拒绝",
+      "empty": {
+        "description": "Dreaming 后台还没有生成待处理 insight。",
+        "title": "暂无 Dreaming Insight"
+      },
+      "status": {
+        "all": "全部",
+        "applied": "已应用",
+        "pending": "待处理",
+        "rejected": "已拒绝"
+      }
+    }
+  },
+  "knowledge": {
+    "chunkIndex": "Chunk {{index}}",
+    "description": "创建文本知识，按切片保存，并根据 Agent 的 embedding 开关使用关键词或向量检索。",
+    "similarity": "相似度 {{value}}",
+    "title": "Knowledge Base",
+    "tokens": "{{count}} tokens",
+    "unknownDocument": "未知文档",
+    "errors": {
+      "operationFailed": "知识库操作失败"
+    },
+    "documents": {
+      "title": "文档",
+      "empty": {
+        "description": "先写入一段文本知识，再用搜索验证关键词或向量检索链路。",
+        "title": "还没有知识文档"
+      }
+    },
+    "fields": {
+      "content": "文本内容",
+      "sourceType": "来源类型",
+      "sourceURI": "来源 URI",
+      "title": "标题",
+      "visibility": "可见性"
+    },
+    "ingest": {
+      "create": "创建文档",
+      "created": "已创建文档，切成 {{chunks}} 个 chunk，embedding 状态：{{status}}",
+      "creating": "创建中",
+      "formTitle": "新增知识文档"
+    },
+    "search": {
+      "placeholder": "搜索知识库内容",
+      "results": "搜索结果",
+      "empty": {
+        "description": "换一个关键词，或确认文档内容已经包含相关文本。",
+        "title": "没有搜索结果"
+      }
+    },
+    "sourceTypes": {
+      "manual": "手动",
+      "note": "笔记",
+      "upload": "上传",
+      "url": "URL"
+    },
+    "visibility": {
+      "private": "私有",
+      "public": "公有"
+    }
+  },
+  "tools": {
+    "description": "查看 Tool Registry，处理需要用户确认的工具调用审批。",
+    "title": "Tools",
+    "errors": {
+      "operationFailed": "工具操作失败"
+    },
+    "registry": {
+      "empty": {
+        "description": "后端启动时会注册内置工具；如果这里为空，检查 Tool Registry 初始化。",
+        "title": "还没有工具"
+      },
+      "requiresApproval": "需要审批",
+      "title": "Tool Registry",
+      "version": "v{{version}}"
+    },
+    "approvals": {
+      "approve": "通过",
+      "empty": {
+        "description": "当前没有符合筛选条件的工具调用审批。",
+        "title": "暂无审批请求"
+      },
+      "reject": "拒绝",
+      "title": "审批请求",
+      "status": {
+        "all": "全部",
+        "approved": "已通过",
+        "pending": "待审批",
+        "rejected": "已拒绝"
+      }
+    }
+  },
+  "market": {
+    "bind": "绑定到 Agent",
+    "bound": "能力已绑定到 Agent",
+    "description": "浏览、安装和绑定 Tool、Skill、MCP、知识库、Channel Adapter 与系统提示词。",
+    "disable": "停用",
+    "enable": "启用",
+    "install": "安装",
+    "installCount": "{{formattedCount}} 次安装",
+    "installedOnly": "只看已安装",
+    "rating": "评分 {{rating}}",
+    "title": "能力市场",
+    "empty": {
+      "description": "当前筛选条件下没有可见能力。可以先创建一个私有系统提示词模板。",
+      "title": "没有市场条目"
+    },
+    "errors": {
+      "operationFailed": "市场操作失败"
+    },
+    "itemTypes": {
+      "all": "全部类型",
+      "channelAdapter": "Channel Adapter",
+      "knowledgeBase": "Knowledge Base",
+      "mcpServer": "MCP Server",
+      "skill": "Skill",
+      "systemPrompt": "System Prompt",
+      "tool": "Tool"
+    },
+    "tabs": {
+      "browse": "市场浏览",
+      "systemPrompt": "系统提示词"
+    },
+    "visibility": {
+      "private": "私有",
+      "public": "公有"
+    },
+    "prompt": {
+      "bindVersion": "绑定此版本",
+      "create": "创建模板",
+      "created": "系统提示词模板已创建",
+      "createTitle": "新增系统提示词模板",
+      "creating": "创建中",
+      "fork": "Fork",
+      "preview": "预览",
+      "previewTitle": "预览 / Fork / 绑定",
+      "tokens": "{{count}} tokens",
+      "fields": {
+        "category": "分类",
+        "content": "模板内容",
+        "description": "描述",
+        "displayName": "显示名称",
+        "forkName": "Fork 名称",
+        "name": "唯一名称",
+        "override": "用户覆盖补充",
+        "previewVariables": "变量值 JSON",
+        "tags": "标签，英文逗号分隔",
+        "variables": "变量定义 JSON 数组",
+        "versionId": "Version ID",
+        "visibility": "可见性"
+      }
+    }
+  },
+  "tasks": {
+    "created": "心跳任务已创建",
+    "deleteConfirm": "确定删除 {{title}} 吗？",
+    "description": "创建每日简报、每周回顾和跟进监控，并查看每次运行记录。",
+    "runNowQueued": "已立即运行，状态：{{status}}",
+    "title": "心跳任务",
+    "errors": {
+      "operationFailed": "心跳任务操作失败"
+    },
+    "actions": {
+      "pause": "暂停",
+      "resume": "恢复",
+      "runNow": "Run Now"
+    },
+    "delivery": {
+      "channel": "外部入口",
+      "inApp": "站内"
+    },
+    "fields": {
+      "contextPolicy": "Context Policy JSON",
+      "cron": "Cron 表达式",
+      "deliveryChannel": "投递渠道",
+      "description": "描述",
+      "jobType": "任务类型",
+      "localTime": "本地时间",
+      "prompt": "Prompt 模板",
+      "scheduleKind": "调度类型",
+      "timezone": "时区",
+      "title": "标题",
+      "toolPolicy": "Tool Policy JSON",
+      "visibility": "可见性",
+      "weekdays": "星期"
+    },
+    "form": {
+      "create": "创建心跳任务",
+      "creating": "创建中",
+      "title": "新建任务"
+    },
+    "jobs": {
+      "failures": "{{count}} 次失败",
+      "noNextRun": "暂无下一次运行",
+      "nextRun": "下次：{{time}}",
+      "title": "任务列表",
+      "empty": {
+        "description": "先使用模板创建每日简报或每周回顾，然后可以手动 Run Now。",
+        "title": "还没有心跳任务"
+      }
+    },
+    "runs": {
+      "selectRun": "选择一条运行记录查看详情。",
+      "title": "运行记录",
+      "titleForJob": "{{title}} 的运行记录",
+      "empty": {
+        "description": "这个任务还没有运行记录，可以点击 Run Now 立即生成一条。",
+        "title": "暂无运行记录"
+      },
+      "noJob": {
+        "description": "选择一个心跳任务后，这里会展示对应运行记录。",
+        "title": "未选择任务"
+      },
+      "fields": {
+        "conversation": "Conversation",
+        "finishedAt": "结束",
+        "scheduledFor": "计划时间",
+        "startedAt": "开始"
+      }
+    },
+    "schedule": {
+      "cron": "Cron",
+      "daily": "每日",
+      "weekly": "每周"
+    },
+    "status": {
+      "active": "运行中",
+      "all": "全部",
+      "paused": "已暂停"
+    },
+    "templates": {
+      "title": "建议模板",
+      "use": "使用"
+    },
+    "visibility": {
+      "private": "私有",
+      "public": "公有"
+    },
+    "weekdays": {
+      "1": "一",
+      "2": "二",
+      "3": "三",
+      "4": "四",
+      "5": "五",
+      "6": "六",
+      "7": "日"
+    }
+  },
+  "channels": {
+    "configured": "已配置",
+    "description": "管理 QQ / NapCat / OneBot 等外部入口，把 Channel 监听、策略和外发草稿统一收进控制台。",
+    "title": "Channels",
+    "unconfigured": "未配置",
+    "errors": {
+      "invalidJson": "JSON 必须是一个合法对象",
+      "operationFailed": "Channel 操作失败"
+    },
+    "providers": {
+      "empty": "暂无可用 Channel Provider",
+      "title": "Provider 列表"
+    },
+    "connection": {
+      "create": "创建连接",
+      "created": "Channel 连接已创建",
+      "displayName": "显示名称",
+      "externalAccountId": "外部账号 ID",
+      "externalAccountName": "外部账号名称",
+      "lastEventAt": "最近事件",
+      "noExternalAccount": "未填写外部账号",
+      "provider": "Provider"
+    },
+    "connections": {
+      "title": "连接列表",
+      "empty": {
+        "description": "先创建一个 NapCatQQ / OneBot 连接，然后把 webhook 配到外部入口。",
+        "title": "还没有 Channel 连接"
+      }
+    },
+    "detail": {
+      "empty": {
+        "description": "创建或选择一个连接后，可以配置策略并查看 inbox / outbox。",
+        "title": "未选择连接"
+      }
+    },
+    "tabs": {
+      "conversations": "外部对话",
+      "inbox": "Inbox",
+      "outbox": "Outbox"
+    },
+    "policy": {
+      "allowMemoryWrite": "允许写入记忆",
+      "allowToolUse": "允许使用工具",
+      "current": "当前策略",
+      "empty": "暂无策略。创建连接时会自动生成默认私聊和群聊策略。",
+      "externalScopeId": "外部 Scope ID，留空表示默认策略",
+      "globalScope": "默认 Scope",
+      "rateLimit": "每分钟 {{count}} 次",
+      "requireApprovalForOutbound": "外发消息需要审批",
+      "save": "保存策略",
+      "saved": "Channel 策略已保存",
+      "title": "策略配置",
+      "triggerKeywords": "关键词，英文逗号或换行分隔",
+      "mode": {
+        "auto_reply": "自动回复",
+        "keyword": "关键词触发",
+        "mention_only": "@ 触发",
+        "off": "关闭"
+      },
+      "scope": {
+        "group_chat": "群聊",
+        "private_chat": "私聊"
+      }
+    },
+    "inbox": {
+      "noText": "无文本内容",
+      "triggered": "已触发",
+      "empty": {
+        "description": "外部 webhook 收到消息后，这里会显示标准化后的 inbox event。",
+        "title": "暂无 Inbox Event"
+      }
+    },
+    "outbox": {
+      "approve": "通过",
+      "cancel": "取消",
+      "requiresApproval": "需审批",
+      "send": "发送",
+      "confirm": {
+        "cancel": "确定取消这条 outbox 草稿吗？",
+        "send": "确定发送这条已审批 outbox 消息吗？"
+      },
+      "empty": {
+        "description": "Agent 为外部入口生成回复后，会在这里产生 outbox 草稿。",
+        "title": "暂无 Outbox 消息"
+      },
+      "status": {
+        "all": "全部",
+        "approved": "已审批",
+        "cancelled": "已取消",
+        "failed": "失败",
+        "pending": "待审批",
+        "sent": "已发送"
+      }
+    },
+    "conversations": {
+      "empty": {
+        "description": "外部私聊或群聊绑定到 Web conversation 后，会在这里出现。",
+        "title": "暂无外部对话"
+      }
+    }
+  },
+  "providers": {
+    "apiKeys": "API Key",
+    "chatAPIKey": "Chat API Key",
+    "chatBaseURL": "Chat Base URL",
+    "chatKeyConfigured": "Chat 已配置",
+    "chatKeyMissing": "Chat 未配置",
+    "chatModel": "默认 Chat 模型",
+    "default": "默认",
+    "deleteConfirm": "确定删除 {{name}} 吗？",
+    "description": "配置用户自己的模型供应商、API Key、默认模型和 embedding 模型。",
+    "displayName": "显示名称",
+    "embeddingAPIKey": "Embedding API Key",
+    "embeddingBaseURL": "Embedding Base URL",
+    "embeddingKeyConfigured": "Embedding 已配置",
+    "embeddingKeyMissing": "Embedding 未配置",
+    "embeddingModel": "默认 Embedding 模型",
+    "errors": {
+      "mutationFailed": "模型供应商操作失败"
+    },
+    "empty": {
+      "description": "先添加一个 OpenAI-compatible Provider，例如 LongCat；需要 RAG 时再补 SiliconFlow embedding。",
+      "title": "还没有模型供应商"
+    },
+    "form": {
+      "create": "创建 Provider",
+      "createTitle": "新增 Provider",
+      "editTitle": "编辑 Provider"
+    },
+    "isDefault": "设为默认 Provider",
+    "keepExistingKey": "留空则保持原 Key",
+    "provider": "供应商类型",
+    "title": "模型 Providers"
+  },
+  "agent": {
+    "defaultChatProvider": "默认 Chat Provider",
+    "description": "配置默认模型、提示词、推理参数、工具审批、记忆和额外 LLM 功能。",
+    "errors": {
+      "saveFailed": "保存 Agent 配置失败"
+    },
+    "features": {
+      "auto_compression_llm": "自动上下文压缩",
+      "curator_llm": "记忆整理 Curator",
+      "dreaming_llm": "Dreaming",
+      "shadow_validator_llm": "Shadow Validator",
+      "skill_router_llm": "Skill Router"
+    },
+    "fields": {
+      "defaultProvider": "默认 Provider",
+      "dreamingEnabled": "启用 Dreaming",
+      "embedPublicKnowledge": "允许公有知识 embedding",
+      "embeddingEnabled": "启用 Embedding",
+      "embeddingMonthlyTokens": "Embedding 月度 Token 上限",
+      "featureProvider": "Feature Provider",
+      "featureTemperature": "温度",
+      "llmRetryLimit": "LLM 重试次数",
+      "maxContextTokens": "最大上下文 Token",
+      "maxLoopSteps": "最大 Agent Loop 步数",
+      "memoryEnabled": "启用记忆",
+      "modelOverride": "模型覆盖",
+      "name": "Agent 名称",
+      "semanticMemoryEnabled": "启用 Semantic Memory",
+      "systemPrompt": "系统提示词",
+      "temperature": "Temperature",
+      "thinkingBudgetTokens": "Thinking Token 预算",
+      "thinkingEffort": "Thinking Effort",
+      "thinkingEnabled": "启用 Thinking",
+      "toolApprovalPolicy": "工具审批策略",
+      "toolUseEnabled": "启用工具调用"
+    },
+    "none": "不指定",
+    "saved": "Agent 配置已保存",
+    "saving": "保存中",
+    "sections": {
+      "basic": "基础",
+      "capabilities": "能力开关",
+      "embedding": "Embedding 成本控制",
+      "features": "额外 LLM 功能",
+      "model": "模型与上下文"
+    },
+    "thinking": {
+      "high": "高",
+      "low": "低",
+      "medium": "中"
+    },
+    "title": "Agent 配置",
+    "toolApproval": {
+      "always": "所有工具都审批",
+      "never": "不审批直接执行",
+      "sensitiveOnly": "仅敏感工具审批"
+    }
+  },
+  "chat": {
+    "composer": {
+      "disabledPlaceholder": "请先创建或选择一个会话",
+      "placeholder": "输入消息，按 Cmd/Ctrl + Enter 发送",
+      "send": "发送",
+      "sending": "发送中"
+    },
+    "empty": {
+      "noConversationTitle": "选择或创建一个会话",
+      "noConversationDescription": "左侧会话列表会显示你的 Web Chat。创建会话后就可以开始和 Agent 对话。",
+      "noMessagesTitle": "还没有消息",
+      "noMessagesDescription": "发送第一条消息后，Agent 会读取配置、记忆和工具上下文并生成回复。"
+    },
+    "errors": {
+      "createFailed": "创建会话失败",
+      "loadFailed": "加载会话失败",
+      "sendFailed": "发送消息失败"
+    },
+    "header": {
+      "activeDescription": "Web Chat 主动触发 Agent Loop",
+      "emptyDescription": "创建会话后开始聊天",
+      "noConversation": "未选择会话",
+      "waitingForAssistant": "Agent 正在生成回复"
+    },
+    "sidebar": {
+      "create": "创建会话",
+      "defaultTitle": "新的对话",
+      "emptyTitle": "暂无会话",
+      "emptyDescription": "创建一个会话，先把 Web Chat 主链路跑起来。",
+      "newConversationPlaceholder": "新的对话",
+      "newConversationTitle": "会话标题",
+      "title": "会话"
+    }
   },
   "layout": {
     "language": "语言",

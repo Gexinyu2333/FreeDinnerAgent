@@ -7,6 +7,7 @@ func registerToolRoutes(router *gin.RouterGroup, h Handlers) {
 	router.POST("/tools/:tool_name/call", h.Tool.Execute)
 	router.GET("/conversations/:conversation_id/tool-calls", h.Tool.ConversationCalls)
 	router.GET("/tool-calls/:tool_call_id", h.Tool.Call)
+	router.GET("/tool-approval-requests", h.Tool.Approvals)
 	router.POST("/tool-approval-requests/:approval_id/approve", h.Tool.Approve)
 	router.POST("/tool-approval-requests/:approval_id/reject", h.Tool.Reject)
 }

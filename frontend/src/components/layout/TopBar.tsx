@@ -3,14 +3,18 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
+import { currentUserQueryKey, useCurrentUser } from "../../features/auth/hooks";
 import { clearTokens } from "../../lib/authToken";
 import { changeLocale } from "../../lib/i18n";
+import { queryClient } from "../../lib/queryClient";
 
 export function TopBar() {
   const { i18n, t } = useTranslation();
+  const { data: currentUser } = useCurrentUser();
 
   function handleLogout() {
     clearTokens();
+    queryClient.removeQueries({ queryKey: currentUserQueryKey });
     window.location.assign("/login");
   }
 
@@ -31,6 +35,14 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {currentUser && (
+          <div className="hidden min-w-0 text-right sm:block">
+            <div className="truncate text-sm font-medium text-ink-900">
+              {currentUser.display_name || currentUser.username}
+            </div>
+            <div className="truncate text-xs text-ink-500">@{currentUser.username}</div>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-ink-600">
           <Languages className="h-4 w-4" />
           <Select

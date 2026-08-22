@@ -46,7 +46,7 @@ func (s *ChannelStore) ListInboxEvents(ctx context.Context, userID, connectionID
 		return nil, err
 	}
 	defer rows.Close()
-	var events []ChannelInboxEvent
+	events := make([]ChannelInboxEvent, 0)
 	for rows.Next() {
 		event, err := scanChannelInboxEvent(rows)
 		if err != nil {

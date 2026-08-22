@@ -11,6 +11,7 @@ export type ApiResponse<T> = {
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
+  redirectOnUnauthorized?: boolean;
 };
 
 export async function apiClient<T>(
@@ -45,7 +46,7 @@ export async function apiClient<T>(
     };
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 && options.redirectOnUnauthorized !== false) {
     clearTokens();
     window.location.assign("/login");
   }

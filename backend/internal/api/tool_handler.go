@@ -41,6 +41,21 @@ func (h *ToolHandler) List(c *gin.Context) {
 	OK(c, tools)
 }
 
+func (h *ToolHandler) Approvals(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	status := trimAPIString(queryStringPtr(c, "status"))
+	approvals, err := h.tools.ListApprovals(c.Request.Context(), userID, status, parseLimit(c.Query("limit")))
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list approval requests")
+		return
+	}
+	OK(c, approvals)
+}
+
 func (h *ToolHandler) Execute(c *gin.Context) {
 	userID, ok := CurrentUserID(c)
 	if !ok {

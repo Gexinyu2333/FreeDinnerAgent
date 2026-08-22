@@ -79,14 +79,31 @@ func (s *Service) executeScheduledJob(ctx context.Context, job store.ScheduledAg
 	summary := scheduledRunSummary(job.Title, triggerReason)
 	var message store.Message
 	var agentTurnID *string
+	status := "success"
+	var errorMessage *string
 	if s.responder != nil {
 		result, err := s.responder.SendMessage(ctx, job.UserID, conversation.ID, scheduledPrompt(job, triggerReason, scheduledFor))
 		if err != nil {
-			return RunNowResult{}, err
+			status = "failed"
+			messageText := err.Error()
+			errorMessage = &messageText
+			summary = scheduledRunFailedSummary(job.Title, triggerReason, messageText)
+			metadata, _ := json.Marshal(map[string]any{
+				"source":           "scheduled_agent_job",
+				"scheduled_job_id": job.ID,
+				"trigger_reason":   triggerReason,
+				"scheduled_for":    scheduledFor.Format(time.RFC3339),
+				"error":            messageText,
+			})
+			message, err = s.conversations.CreateAssistantMessage(ctx, job.UserID, conversation.ID, summary, metadata)
+			if err != nil {
+				return RunNowResult{}, err
+			}
+		} else {
+			message = result.AssistantMessage
+			agentTurnID = &result.TurnID
+			summary = message.Content
 		}
-		message = result.AssistantMessage
-		agentTurnID = &result.TurnID
-		summary = message.Content
 	} else {
 		metadata, _ := json.Marshal(map[string]any{
 			"source":           "scheduled_agent_job",
@@ -116,10 +133,11 @@ func (s *Service) executeScheduledJob(ctx context.Context, job store.ScheduledAg
 		ScheduledJobID: job.ID,
 		ConversationID: &conversation.ID,
 		AgentTurnID:    agentTurnID,
-		Status:         "success",
+		Status:         status,
 		TriggerReason:  triggerReason,
 		InputSnapshot:  inputSnapshot,
 		OutputSummary:  &summary,
+		ErrorMessage:   errorMessage,
 		ScheduledFor:   scheduledFor,
 		StartedAt:      &now,
 		FinishedAt:     &now,
@@ -127,8 +145,19 @@ func (s *Service) executeScheduledJob(ctx context.Context, job store.ScheduledAg
 	if err != nil {
 		return RunNowResult{}, err
 	}
-	if err := s.jobs.MarkJobRan(ctx, job.UserID, job.ID, now); err != nil {
-		return RunNowResult{}, err
+	if status == "success" {
+		if err := s.jobs.MarkJobRan(ctx, job.UserID, job.ID, now); err != nil {
+			return RunNowResult{}, err
+		}
+		job.LastRunAt = &now
+		job.FailureCount = 0
+	} else {
+		updatedJob, err := s.jobs.IncrementFailureCount(ctx, job.UserID, job.ID)
+		if err != nil {
+			return RunNowResult{}, err
+		}
+		job.Status = updatedJob.Status
+		job.FailureCount = updatedJob.FailureCount
 	}
 	nextRunAt := ComputeNextRunAt(ScheduleSpec{
 		ScheduleKind:   job.ScheduleKind,
@@ -140,9 +169,7 @@ func (s *Service) executeScheduledJob(ctx context.Context, job store.ScheduledAg
 	})
 	_ = s.jobs.SetNextRunAt(ctx, job.UserID, job.ID, nextRunAt)
 
-	job.LastRunAt = &now
 	job.NextRunAt = nextRunAt
-	job.FailureCount = 0
 	return RunNowResult{
 		Job:          job,
 		Run:          run,
@@ -182,6 +209,13 @@ func scheduledRunSummary(title string, triggerReason string) string {
 		return fmt.Sprintf("已手动触发心跳任务「%s」。", title)
 	}
 	return fmt.Sprintf("心跳任务「%s」已按计划触发。", title)
+}
+
+func scheduledRunFailedSummary(title string, triggerReason string, message string) string {
+	if triggerReason == "manual_run" {
+		return fmt.Sprintf("已手动触发心跳任务「%s」，但执行失败：%s", title, message)
+	}
+	return fmt.Sprintf("心跳任务「%s」已按计划触发，但执行失败：%s", title, message)
 }
 
 func scheduledPrompt(job store.ScheduledAgentJob, triggerReason string, scheduledFor time.Time) string {

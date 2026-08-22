@@ -106,7 +106,7 @@ func (s *MemoryStore) SearchEpisodes(ctx context.Context, userID, query string, 
 		return nil, err
 	}
 	defer rows.Close()
-	var matches []EpisodeMatch
+	matches := make([]EpisodeMatch, 0)
 	for rows.Next() {
 		var match EpisodeMatch
 		if err := rows.Scan(&match.ID, &match.UserID, &match.ConversationID, &match.UserMessageID,

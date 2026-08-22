@@ -70,6 +70,10 @@ func (s *Service) ListTools(ctx context.Context, userID string) ([]store.ToolDef
 	return s.tools.ListTools(ctx, userID)
 }
 
+func (s *Service) ListApprovals(ctx context.Context, userID string, status *string, limit int) ([]store.ToolApprovalRequest, error) {
+	return s.tools.ListApprovalRequests(ctx, userID, status, limit)
+}
+
 func (s *Service) Execute(ctx context.Context, input ExecuteInput) (ExecuteResult, error) {
 	startedAt := time.Now()
 	toolDefinition, err := s.tools.FindTool(ctx, input.UserID, input.ToolName)

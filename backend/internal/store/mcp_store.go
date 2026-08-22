@@ -72,7 +72,7 @@ func (s *MCPStore) ListEnabledServers(ctx context.Context, limit int) ([]Enabled
 		return nil, err
 	}
 	defer rows.Close()
-	var items []EnabledMCPServer
+	items := make([]EnabledMCPServer, 0)
 	for rows.Next() {
 		var item EnabledMCPServer
 		err := rows.Scan(&item.Definition.ID, &item.Definition.UserID, &item.Definition.Name,

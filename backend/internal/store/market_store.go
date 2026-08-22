@@ -25,6 +25,12 @@ type MarketplaceItem struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
+type MarketplaceItemView struct {
+	MarketplaceItem
+	ViewerInstall               *CapabilityInstall `json:"viewer_install,omitempty"`
+	SystemPromptLatestVersionID *string            `json:"system_prompt_latest_version_id,omitempty"`
+}
+
 type MarketplaceReview struct {
 	ID                string    `json:"id"`
 	MarketplaceItemID string    `json:"marketplace_item_id"`

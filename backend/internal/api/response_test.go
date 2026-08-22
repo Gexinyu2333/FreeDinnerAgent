@@ -50,6 +50,35 @@ func TestOKAndErrorResponseShape(t *testing.T) {
 	}
 }
 
+func TestOKEmptySliceEncodesAsArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.GET("/items", func(c *gin.Context) {
+		OK(c, make([]string, 0))
+	})
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/items", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("/items status = %d", recorder.Code)
+	}
+
+	var body struct {
+		Data  []string   `json:"data"`
+		Error *errorBody `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Data == nil || len(body.Data) != 0 {
+		t.Fatalf("expected empty array data, got %#v", body.Data)
+	}
+	if body.Error != nil {
+		t.Fatalf("expected nil error, got %#v", body.Error)
+	}
+}
+
 func TestCORSHandlesPreflight(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

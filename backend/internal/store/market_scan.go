@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -17,6 +18,58 @@ func scanMarketplaceItem(row pgx.Row) (MarketplaceItem, error) {
 		return MarketplaceItem{}, err
 	}
 	return item, nil
+}
+
+func scanMarketplaceItemView(row pgx.Row) (MarketplaceItemView, error) {
+	var view MarketplaceItemView
+	var install CapabilityInstall
+	var installID *string
+	var installUserID *string
+	var marketplaceItemID *string
+	var capabilityType *string
+	var capabilityRefID *string
+	var isEnabled *bool
+	var installSource *string
+	var installedAt *time.Time
+	var updatedAt *time.Time
+	var systemPromptLatestVersionID *string
+	if err := row.Scan(&view.ID, &view.ItemType, &view.RefID, &view.OwnerUserID, &view.Visibility,
+		&view.Title, &view.Description, &view.Category, &view.Tags, &view.InstallCount, &view.Rating,
+		&view.Status, &view.Metadata, &view.CreatedAt, &view.UpdatedAt,
+		&installID, &installUserID, &marketplaceItemID, &capabilityType, &capabilityRefID,
+		&isEnabled, &installSource, &installedAt, &updatedAt, &systemPromptLatestVersionID); err != nil {
+		return MarketplaceItemView{}, err
+	}
+	view.SystemPromptLatestVersionID = systemPromptLatestVersionID
+	if installID != nil {
+		install.ID = *installID
+		if installUserID != nil {
+			install.UserID = *installUserID
+		}
+		if marketplaceItemID != nil {
+			install.MarketplaceItemID = marketplaceItemID
+		}
+		if capabilityType != nil {
+			install.CapabilityType = *capabilityType
+		}
+		if capabilityRefID != nil {
+			install.CapabilityRefID = *capabilityRefID
+		}
+		if isEnabled != nil {
+			install.IsEnabled = *isEnabled
+		}
+		if installSource != nil {
+			install.InstallSource = *installSource
+		}
+		if installedAt != nil {
+			install.InstalledAt = *installedAt
+		}
+		if updatedAt != nil {
+			install.UpdatedAt = *updatedAt
+		}
+		view.ViewerInstall = &install
+	}
+	return view, nil
 }
 
 func scanMarketplaceReview(row pgx.Row) (MarketplaceReview, error) {

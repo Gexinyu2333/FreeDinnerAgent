@@ -41,7 +41,7 @@ func (s *ChannelStore) ListConnections(ctx context.Context, userID string) ([]Ch
 		return nil, err
 	}
 	defer rows.Close()
-	var connections []ChannelConnection
+	connections := make([]ChannelConnection, 0)
 	for rows.Next() {
 		connection, err := scanChannelConnection(rows)
 		if err != nil {

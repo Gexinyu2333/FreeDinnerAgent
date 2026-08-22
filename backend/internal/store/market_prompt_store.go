@@ -104,7 +104,7 @@ func (s *MarketStore) ListSystemPromptVariables(ctx context.Context, versionID s
 		return nil, err
 	}
 	defer rows.Close()
-	var variables []SystemPromptVariable
+	variables := make([]SystemPromptVariable, 0)
 	for rows.Next() {
 		var variable SystemPromptVariable
 		if err := rows.Scan(&variable.ID, &variable.TemplateVersionID, &variable.Name, &variable.DisplayName,

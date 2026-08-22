@@ -55,7 +55,7 @@ func (s *AgentConfigStore) ListLLMFeatureSettings(ctx context.Context, userID, a
 		return nil, err
 	}
 	defer rows.Close()
-	var settings []LLMFeatureSetting
+	settings := make([]LLMFeatureSetting, 0)
 	for rows.Next() {
 		setting, err := scanLLMFeatureSetting(rows)
 		if err != nil {

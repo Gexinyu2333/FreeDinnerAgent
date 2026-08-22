@@ -77,8 +77,8 @@ func NewService(marketStore *store.MarketStore, agentConfig *store.AgentConfigSt
 	return &Service{market: marketStore, agentConfig: agentConfig}
 }
 
-func (s *Service) ListItems(ctx context.Context, userID string, itemType *string, installedOnly bool, limit int) ([]store.MarketplaceItem, error) {
-	return s.market.ListMarketplaceItems(ctx, userID, itemType, installedOnly, limit)
+func (s *Service) ListItems(ctx context.Context, userID string, itemType *string, installedOnly bool, limit int) ([]store.MarketplaceItemView, error) {
+	return s.market.ListMarketplaceItemViews(ctx, userID, itemType, installedOnly, limit)
 }
 
 func (s *Service) Install(ctx context.Context, userID, itemID string) (store.CapabilityInstall, error) {

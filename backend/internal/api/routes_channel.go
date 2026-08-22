@@ -6,6 +6,7 @@ func registerChannelRoutes(router *gin.RouterGroup, h Handlers) {
 	router.GET("/channel-providers", h.Channel.Providers)
 	router.POST("/me/channel-connections", h.Channel.CreateConnection)
 	router.GET("/me/channel-connections", h.Channel.Connections)
+	router.GET("/me/channel-connections/:connection_id/policies", h.Channel.Policies)
 	router.PATCH("/me/channel-connections/:connection_id/policies", h.Channel.UpsertPolicy)
 	router.GET("/me/channel-connections/:connection_id/external-conversations", h.Channel.ExternalConversations)
 	router.GET("/me/channel-connections/:connection_id/inbox-events", h.Channel.InboxEvents)

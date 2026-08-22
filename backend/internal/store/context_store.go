@@ -161,7 +161,7 @@ func (s *ContextStore) ListActiveSummaries(ctx context.Context, userID, conversa
 		return nil, err
 	}
 	defer rows.Close()
-	var summaries []ConversationSummary
+	summaries := make([]ConversationSummary, 0)
 	for rows.Next() {
 		summary, err := scanConversationSummary(rows)
 		if err != nil {

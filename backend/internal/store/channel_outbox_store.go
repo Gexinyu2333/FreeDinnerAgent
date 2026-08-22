@@ -42,7 +42,7 @@ func (s *ChannelStore) ListOutboxMessages(ctx context.Context, userID, connectio
 		return nil, err
 	}
 	defer rows.Close()
-	var messages []ChannelOutboxMessage
+	messages := make([]ChannelOutboxMessage, 0)
 	for rows.Next() {
 		message, err := scanChannelOutboxMessage(rows)
 		if err != nil {
@@ -70,7 +70,7 @@ func (s *ChannelStore) ListApprovedOutboxMessages(ctx context.Context, limit int
 		return nil, err
 	}
 	defer rows.Close()
-	var messages []ChannelOutboxMessage
+	messages := make([]ChannelOutboxMessage, 0)
 	for rows.Next() {
 		message, err := scanChannelOutboxMessage(rows)
 		if err != nil {
@@ -92,16 +92,31 @@ func (s *ChannelStore) FindOutboxMessage(ctx context.Context, userID, outboxID s
 }
 
 func (s *ChannelStore) ResolveOutboxMessage(ctx context.Context, userID, outboxID, status string) (ChannelOutboxMessage, error) {
-	return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
-		UPDATE channel_outbox_messages
-		SET status = $3,
-			approved_at = CASE WHEN $3 = 'approved' THEN NOW() ELSE approved_at END,
-			error_message = CASE WHEN $3 = 'cancelled' THEN 'cancelled by user' ELSE error_message END
-		WHERE id = $1 AND user_id = $2 AND status = 'pending'
-		RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
-			reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
-			external_message_id, error_message, created_at, approved_at, sent_at
-	`, outboxID, userID, status))
+	switch status {
+	case "approved":
+		return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+			UPDATE channel_outbox_messages
+			SET status = 'approved',
+				approved_at = NOW(),
+				error_message = NULL
+			WHERE id = $1 AND user_id = $2 AND status = 'pending'
+			RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+				reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+				external_message_id, error_message, created_at, approved_at, sent_at
+		`, outboxID, userID))
+	case "cancelled":
+		return scanChannelOutboxMessage(s.db.QueryRow(ctx, `
+			UPDATE channel_outbox_messages
+			SET status = 'cancelled',
+				error_message = 'cancelled by user'
+			WHERE id = $1 AND user_id = $2 AND status = 'pending'
+			RETURNING id, user_id, channel_connection_id, external_conversation_id, conversation_id, agent_turn_id,
+				reply_to_inbox_event_id, message_type, content, payload, requires_approval, status,
+				external_message_id, error_message, created_at, approved_at, sent_at
+		`, outboxID, userID))
+	default:
+		return ChannelOutboxMessage{}, ErrNotFound
+	}
 }
 
 func (s *ChannelStore) MarkOutboxSending(ctx context.Context, userID, outboxID string) (ChannelOutboxMessage, error) {

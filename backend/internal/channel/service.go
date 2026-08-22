@@ -116,31 +116,41 @@ func (s *Service) CreateConnection(ctx context.Context, input CreateConnectionIn
 		return store.ChannelConnection{}, err
 	}
 
-	_, _ = s.channels.UpsertPolicy(ctx, store.ChannelPolicyUpsert{
+	if _, err := s.channels.UpsertPolicy(ctx, store.ChannelPolicyUpsert{
 		UserID:                     input.UserID,
 		ChannelConnectionID:        connection.ID,
 		ScopeType:                  "private_chat",
 		Mode:                       "auto_reply",
+		TriggerKeywords:            []string{},
 		AllowMemoryWrite:           true,
 		AllowToolUse:               true,
 		RequireApprovalForOutbound: false,
 		RateLimitPerMinute:         6,
-	})
-	_, _ = s.channels.UpsertPolicy(ctx, store.ChannelPolicyUpsert{
+	}); err != nil {
+		return store.ChannelConnection{}, err
+	}
+	if _, err := s.channels.UpsertPolicy(ctx, store.ChannelPolicyUpsert{
 		UserID:                     input.UserID,
 		ChannelConnectionID:        connection.ID,
 		ScopeType:                  "group_chat",
 		Mode:                       "mention_only",
+		TriggerKeywords:            []string{},
 		AllowMemoryWrite:           true,
 		AllowToolUse:               true,
 		RequireApprovalForOutbound: true,
 		RateLimitPerMinute:         6,
-	})
+	}); err != nil {
+		return store.ChannelConnection{}, err
+	}
 	return connection, nil
 }
 
 func (s *Service) ListConnections(ctx context.Context, userID string) ([]store.ChannelConnection, error) {
 	return s.channels.ListConnections(ctx, userID)
+}
+
+func (s *Service) ListPolicies(ctx context.Context, userID, connectionID string) ([]store.ChannelPolicy, error) {
+	return s.channels.ListPolicies(ctx, userID, connectionID)
 }
 
 func (s *Service) UpsertPolicy(ctx context.Context, input UpsertPolicyInput) (store.ChannelPolicy, error) {

@@ -25,6 +25,33 @@ func (s *ToolStore) CreateApprovalRequest(ctx context.Context, input ToolApprova
 		input.ApprovalReason, input.RiskLevel, input.ProposedArguments))
 }
 
+func (s *ToolStore) ListApprovalRequests(ctx context.Context, userID string, status *string, limit int) ([]ToolApprovalRequest, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT id, tool_call_id, user_id, conversation_id, turn_id, approval_reason,
+		       risk_level, proposed_arguments, status, created_at, resolved_at
+		FROM tool_approval_requests
+		WHERE user_id = $1 AND ($2::text IS NULL OR status = $2)
+		ORDER BY created_at DESC
+		LIMIT $3
+	`, userID, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	requests := make([]ToolApprovalRequest, 0)
+	for rows.Next() {
+		request, err := scanToolApprovalRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, request)
+	}
+	return requests, rows.Err()
+}
+
 func (s *ToolStore) ResolveApprovalRequest(ctx context.Context, userID, approvalID, status string) (ToolApprovalRequest, error) {
 	return scanToolApprovalRequest(s.db.QueryRow(ctx, `
 		WITH resolved AS (

@@ -30,9 +30,57 @@ func (s *MarketStore) ListMarketplaceItems(ctx context.Context, userID string, i
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MarketplaceItem
+	items := make([]MarketplaceItem, 0)
 	for rows.Next() {
 		item, err := scanMarketplaceItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MarketStore) ListMarketplaceItemViews(ctx context.Context, userID string, itemType *string, installedOnly bool, limit int) ([]MarketplaceItemView, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	installedFilter := ""
+	if installedOnly {
+		installedFilter = "AND uci.id IS NOT NULL AND uci.is_enabled = TRUE"
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT mi.id, mi.item_type, mi.ref_id, mi.owner_user_id, mi.visibility, mi.title, mi.description,
+		       mi.category, mi.tags, mi.install_count, mi.rating, mi.status, mi.metadata, mi.created_at, mi.updated_at,
+		       uci.id, uci.user_id, uci.marketplace_item_id, uci.capability_type, uci.capability_ref_id,
+		       uci.is_enabled, uci.install_source, uci.installed_at, uci.updated_at,
+		       spv.id
+		FROM marketplace_items mi
+		LEFT JOIN user_capability_installs uci
+		  ON uci.user_id = $1
+		 AND uci.capability_type = mi.item_type
+		 AND uci.capability_ref_id = mi.ref_id
+		LEFT JOIN system_prompt_templates spt
+		  ON mi.item_type = 'system_prompt_template'
+		 AND spt.id = mi.ref_id
+		LEFT JOIN system_prompt_template_versions spv
+		  ON spv.template_id = spt.id
+		 AND spv.version = spt.latest_version
+		 AND spv.status = 'published'
+		WHERE mi.status = 'listed'
+		  AND ($2::text IS NULL OR mi.item_type = $2)
+		  AND (mi.visibility = 'public' OR mi.owner_user_id = $1)
+		  `+installedFilter+`
+		ORDER BY mi.install_count DESC, mi.updated_at DESC
+		LIMIT $3
+	`, userID, itemType, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]MarketplaceItemView, 0)
+	for rows.Next() {
+		item, err := scanMarketplaceItemView(rows)
 		if err != nil {
 			return nil, err
 		}
