@@ -520,13 +520,20 @@
     "sessions": {
       "createOutboxDraft": "创建外发草稿",
       "draftCreated": "外发草稿已创建",
-      "noMessages": "这个外部会话还没有可展示的 transcript。",
+      "fullTranscript": "完整转录",
+      "inboundDescription": "来自 QQ、微信、Discord 等外部平台的原始入口消息，只负责记录和触发。",
+      "inboundTitle": "输入 / 外部消息",
+      "noInbound": "这个外部会话还没有入站消息。",
+      "noMessages": "这个外部会话还没有可展示的完整转录。",
+      "noOutbound": "这个外部会话还没有出站消息。",
       "outboxDraftDescription": "这里不会直接向外部平台发送消息，只会生成 Outbox 草稿，再按策略审批或发送。",
       "outboxDraftPlaceholder": "写一条准备发送到这个外部会话的回复",
       "outboxDraftTitle": "人工接管回复",
+      "outboundDescription": "Agent 回复、人工草稿和实际发送状态都在这里，不混入 Web Chat 输入框。",
+      "outboundTitle": "输出 / Agent Outbox",
       "readonly": "只读",
       "readonlyDescription": "这是外部 Channel 的监听会话，不能在 Web Chat 输入框里直接回复；需要发送时请走 Outbox。",
-      "selectDescription": "选择一个 QQ 群聊、私聊或后续接入的外部会话，查看只读 transcript。",
+      "selectDescription": "选择一个 QQ 群聊、私聊或后续接入的外部会话，查看输入/输出流。",
       "selectTitle": "选择外部会话"
     },
     "logs": {

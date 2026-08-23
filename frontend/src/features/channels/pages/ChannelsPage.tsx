@@ -157,10 +157,12 @@ export function ChannelsPage() {
   );
   const inboxQuery = useInboxEvents(selectedConnectionID);
   const outboxQuery = useOutboxMessages(selectedConnectionID, outboxStatus || undefined);
+  const allOutboxQuery = useOutboxMessages(selectedConnectionID);
   const policies = policiesQuery.data ?? [];
   const externalConversations = externalConversationsQuery.data ?? [];
   const inboxEvents = inboxQuery.data ?? [];
-  const outboxMessages = outboxQuery.data ?? [];
+  const filteredOutboxMessages = outboxQuery.data ?? [];
+  const outboxMessages = allOutboxQuery.data ?? [];
   const mutationError =
     createMutation.error ??
     updateMutation.error ??
@@ -589,7 +591,7 @@ export function ChannelsPage() {
               {activeSection === "outbox" && (
                 <OutboxPanel
                   loading={outboxQuery.isLoading}
-                  messages={outboxMessages}
+                  messages={filteredOutboxMessages}
                   onAction={mutateOutbox}
                   onStatusChange={setOutboxStatus}
                   status={outboxStatus}
@@ -600,6 +602,7 @@ export function ChannelsPage() {
                   conversations={externalConversations}
                   draftContent={draftContent}
                   draftSaving={createDraftMutation.isPending}
+                  inboxEvents={inboxEvents}
                   loading={externalConversationsQuery.isLoading}
                   messages={externalMessagesQuery.data ?? []}
                   messagesLoading={externalMessagesQuery.isLoading}
@@ -608,6 +611,7 @@ export function ChannelsPage() {
                   onSelect={(externalID) =>
                     navigate(`/app/channels/${selectedConnection.id}/sessions/${externalID}`)
                   }
+                  outboxMessages={outboxMessages}
                   selectedExternalConversationID={selectedExternalConversationID}
                 />
               )}
@@ -1460,23 +1464,27 @@ function ChannelSessionsPanel({
   conversations,
   draftContent,
   draftSaving,
+  inboxEvents,
   loading,
   messages,
   messagesLoading,
   onCreateDraft,
   onDraftChange,
   onSelect,
+  outboxMessages,
   selectedExternalConversationID
 }: {
   conversations: ExternalConversation[];
   draftContent: string;
   draftSaving: boolean;
+  inboxEvents: ChannelInboxEvent[];
   loading: boolean;
   messages: Message[];
   messagesLoading: boolean;
   onCreateDraft: () => void;
   onDraftChange: (value: string) => void;
   onSelect: (externalConversationID: string) => void;
+  outboxMessages: ChannelOutboxMessage[];
   selectedExternalConversationID?: string;
 }) {
   const { t } = useTranslation();
@@ -1495,6 +1503,12 @@ function ChannelSessionsPanel({
   const selectedConversation = conversations.find(
     (conversation) => conversation.external_conversation_id === selectedExternalConversationID
   );
+  const selectedInboxEvents = selectedConversation
+    ? inboxEvents.filter((event) => event.external_conversation_id === selectedConversation.id)
+    : [];
+  const selectedOutboxMessages = selectedConversation
+    ? outboxMessages.filter((message) => message.external_conversation_id === selectedConversation.id)
+    : [];
   return (
     <section className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-3">
@@ -1527,10 +1541,12 @@ function ChannelSessionsPanel({
         conversation={selectedConversation}
         draftContent={draftContent}
         draftSaving={draftSaving}
+        inboxEvents={selectedInboxEvents}
         loading={messagesLoading}
         messages={messages}
         onCreateDraft={onCreateDraft}
         onDraftChange={onDraftChange}
+        outboxMessages={selectedOutboxMessages}
       />
     </section>
   );
@@ -1540,18 +1556,22 @@ function ChannelTranscript({
   conversation,
   draftContent,
   draftSaving,
+  inboxEvents,
   loading,
   messages,
   onCreateDraft,
-  onDraftChange
+  onDraftChange,
+  outboxMessages
 }: {
   conversation?: ExternalConversation;
   draftContent: string;
   draftSaving: boolean;
+  inboxEvents: ChannelInboxEvent[];
   loading: boolean;
   messages: Message[];
   onCreateDraft: () => void;
   onDraftChange: (value: string) => void;
+  outboxMessages: ChannelOutboxMessage[];
 }) {
   const { t } = useTranslation();
   if (!conversation) {
@@ -1566,6 +1586,8 @@ function ChannelTranscript({
   if (loading) {
     return <LoadingState />;
   }
+  const inboundMessages = messages.filter((message) => message.role === "user");
+  const assistantMessages = messages.filter((message) => message.role === "assistant");
   return (
     <section className="min-w-0 rounded-lg border border-ink-200 bg-white">
       <div className="border-b border-ink-100 p-4">
@@ -1579,26 +1601,31 @@ function ChannelTranscript({
           {t("channels.sessions.readonlyDescription")}
         </p>
       </div>
-      <div className="max-h-[560px] space-y-3 overflow-auto p-4">
-        {messages.length === 0 ? (
-          <p className="text-sm text-ink-500">{t("channels.sessions.noMessages")}</p>
-        ) : (
-          messages.map((message) => (
-            <div
-              className="min-w-0 rounded-md border border-ink-100 bg-ink-50 p-3"
-              key={message.id}
-            >
-              <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
-                <Badge>{message.role}</Badge>
-                <span>{channelMessageIdentity(message)}</span>
-                <span>{formatDateTime(message.created_at)}</span>
-              </div>
-              <p className="mt-2 max-h-60 overflow-auto break-all whitespace-pre-wrap text-sm leading-6 text-ink-800">
-                {summarizeChannelText(message.content)}
-              </p>
-            </div>
-          ))
-        )}
+      <div className="space-y-4 p-4">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+          <ChannelInboundStream
+            events={inboxEvents}
+            fallbackMessages={inboundMessages}
+          />
+          <ChannelOutboundStream
+            fallbackMessages={assistantMessages}
+            messages={outboxMessages}
+          />
+        </div>
+        <details className="rounded-lg border border-ink-100 bg-ink-50 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-ink-900">
+            {t("channels.sessions.fullTranscript")}
+          </summary>
+          <div className="mt-3 max-h-80 space-y-3 overflow-auto">
+            {messages.length === 0 ? (
+              <p className="text-sm text-ink-500">{t("channels.sessions.noMessages")}</p>
+            ) : (
+              messages.map((message) => (
+                <ChannelTranscriptItem key={message.id} message={message} />
+              ))
+            )}
+          </div>
+        </details>
       </div>
       <div className="border-t border-ink-100 p-4">
         <div className="rounded-lg border border-ink-200 bg-ink-50 p-3">
@@ -1634,6 +1661,125 @@ function ChannelTranscript({
         </div>
       </div>
     </section>
+  );
+}
+
+function ChannelInboundStream({
+  events,
+  fallbackMessages
+}: {
+  events: ChannelInboxEvent[];
+  fallbackMessages: Message[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="min-w-0 rounded-lg border border-ink-100 bg-ink-50 p-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink-900">
+            {t("channels.sessions.inboundTitle")}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-ink-500">
+            {t("channels.sessions.inboundDescription")}
+          </p>
+        </div>
+        <Badge>{t("channels.sections.inbox")}</Badge>
+      </div>
+      <div className="mt-3 max-h-96 space-y-3 overflow-auto pr-1">
+        {events.length === 0 && fallbackMessages.length === 0 ? (
+          <p className="text-sm text-ink-500">{t("channels.sessions.noInbound")}</p>
+        ) : events.length > 0 ? (
+          events.map((event) => (
+            <div className="min-w-0 rounded-md border border-ink-100 bg-white p-3" key={event.id}>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
+                <Badge>{event.trigger_reason ?? event.event_type}</Badge>
+                <span className="min-w-0 break-all">
+                  {channelEventIdentity(event)}
+                </span>
+                <span>{formatDateTime(event.received_at)}</span>
+              </div>
+              <p className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-ink-800">
+                {summarizeChannelText(event.normalized_text)}
+              </p>
+            </div>
+          ))
+        ) : (
+          fallbackMessages.map((message) => (
+            <ChannelTranscriptItem key={message.id} message={message} />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ChannelOutboundStream({
+  fallbackMessages,
+  messages
+}: {
+  fallbackMessages: Message[];
+  messages: ChannelOutboxMessage[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="min-w-0 rounded-lg border border-ink-100 bg-ink-50 p-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink-900">
+            {t("channels.sessions.outboundTitle")}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-ink-500">
+            {t("channels.sessions.outboundDescription")}
+          </p>
+        </div>
+        <Badge>{t("channels.sections.outbox")}</Badge>
+      </div>
+      <div className="mt-3 max-h-96 space-y-3 overflow-auto pr-1">
+        {messages.length === 0 && fallbackMessages.length === 0 ? (
+          <p className="text-sm text-ink-500">{t("channels.sessions.noOutbound")}</p>
+        ) : messages.length > 0 ? (
+          messages.map((message) => (
+            <div className="min-w-0 rounded-md border border-ink-100 bg-white p-3" key={message.id}>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
+                <Badge>{message.status}</Badge>
+                {message.requires_approval && (
+                  <Badge>{t("channels.outbox.requiresApproval")}</Badge>
+                )}
+                <span>{formatDateTime(message.created_at)}</span>
+                {message.sent_at && <span>{formatDateTime(message.sent_at)}</span>}
+              </div>
+              <p className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-ink-800">
+                {summarizeChannelText(message.content)}
+              </p>
+              {message.error_message && (
+                <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-red-600">
+                  {message.error_message}
+                </p>
+              )}
+            </div>
+          ))
+        ) : (
+          fallbackMessages.map((message) => (
+            <ChannelTranscriptItem key={message.id} message={message} />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ChannelTranscriptItem({ message }: { message: Message }) {
+  return (
+    <div className="min-w-0 rounded-md border border-ink-100 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
+        <Badge>{message.role}</Badge>
+        <span className="min-w-0 break-all">{channelMessageIdentity(message)}</span>
+        <span>{formatDateTime(message.created_at)}</span>
+      </div>
+      <p className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-ink-800">
+        {summarizeChannelText(message.content)}
+      </p>
+    </div>
   );
 }
 
@@ -1721,6 +1867,13 @@ function channelMessageIdentity(message: Message) {
     return parts.join(" · ");
   }
   return message.role;
+}
+
+function channelEventIdentity(event: ChannelInboxEvent) {
+  const sender = event.external_sender_name && event.external_sender_id
+    ? `${event.external_sender_name}(${event.external_sender_id})`
+    : event.external_sender_name || event.external_sender_id;
+  return [event.event_type, sender, event.status].filter(Boolean).join(" · ");
 }
 
 function formatJSON(value: unknown) {
