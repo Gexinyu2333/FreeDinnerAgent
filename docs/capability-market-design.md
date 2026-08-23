@@ -536,12 +536,16 @@ MVP 第一版可以先做：
   - `POST /api/v1/system-prompt-templates`
   - `POST /api/v1/system-prompt-templates/preview`
   - `POST /api/v1/system-prompt-template-versions/{version_id}/fork`
+- 新增 Skill / MCP 创建 API：
+  - `POST /api/v1/skills`：创建用户私有或公开 Skill，写入 `skills`、`skill_versions`、`skill_disclosure_sections` 并上架到 `marketplace_items`。
+  - `POST /api/v1/mcp-server-definitions`：创建用户级 MCP Server Definition，并上架到 `marketplace_items`；用户密钥仍留给 `user_mcp_server_settings.encrypted_env`。
 - Agent 绑定 `system_prompt_template` 时，`agent_capability_bindings.capability_ref_id` 锁定具体 `system_prompt_template_versions.id`，避免公共模板更新导致行为漂移。
 - `llm.Service` 已在构建上下文前解析 Agent 绑定的系统提示词模板版本；如果没有绑定，则继续使用 `user_agent_configs.system_prompt`。
 - 系统提示词模板预览支持 `{variable}` 变量替换、用户自定义 override、required 校验、number/boolean/enum/json 类型校验；创建模板时会自动从内容中提取基础变量定义。
 - 市场条目已支持安装量回算和用户评分，评分会写入 `marketplace_item_reviews` 并回算 `marketplace_items.rating`。
 - 系统提示词模板创建时会做规则版安全扫描，拦截绕过审批、泄露 API Key、跨用户读取等危险指令；通过扫描的版本会把 `review_status = auto_approved` 写入 `safety_policy`，便于审计。
 - 公共模板版本支持 fork 为当前用户的私有模板。
+- Market 前端已提供 Browse、System Prompt、Skill、MCP Server 创建入口；创建成功后会刷新市场条目，用户可以安装并绑定到 Agent。
 
 当前已落地：
 

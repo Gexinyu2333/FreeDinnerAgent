@@ -317,14 +317,14 @@ NapCatQQ MCP Server
 - OneBot 文本中的图片、文件、语音、视频和卡片 CQ 码会被归一化为附件摘要，避免在 normalized text 中保存敏感 URL 或原始附件参数。
 - 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截，并支持在 policy metadata 中配置多窗口 `rate_limits`、用户级 `user_rate_limits` 和 `circuit_breaker` 熔断。
 - 图片、文件、卡片消息已有文本摘要，避免保存敏感 URL 或原始附件参数。
-- 当前 Channel Adapter 负责入口、Agent Loop 回复、outbox 草稿和显式发送；额外 QQ 操作可通过 MCP HTTP bridge 按工具接入。
+- 当前 Channel Adapter 负责入口、Agent Loop 回复、outbox 草稿和显式发送；Tool Registry 已内置 `napcatqq_send_text`、`napcatqq_send_picture`、`napcatqq_poke`，这些工具只在 `source = channel` 且绑定了 NapCatQQ connection 的外部会话中暴露给 Agent，普通 Web Chat 不会看到。更多 QQ 管理类操作仍可通过 MCP HTTP bridge 扩展。
 
 高级项：
 
 - Telegram、Discord、飞书、微信等具体 Adapter 归入高级项，和 Workspace Sandbox 强隔离项一样，不进入当前 MVP 开发范围。
 - 多平台具体协议、第三方平台审核、复杂权限申请、平台风控规避策略归入高级项；当前只保留通用抽象和 NapCatQQ/OneBot 作为首个验证入口。
 - 真实附件下载、附件内容摘要、附件发送和富媒体卡片发送归入高级项；当前完整流程只处理文本与附件占位摘要。
-- QQ 群成员管理、历史消息拉取等额外 QQ MCP tools 不在 Channel Adapter 内硬编码，统一交给 MCP HTTP bridge 工具扩展。
+- QQ 群成员管理、历史消息拉取等额外 QQ MCP tools 不在 Channel Adapter 内硬编码，统一交给 MCP HTTP bridge 工具扩展；当前内置 NapCatQQ tools 只覆盖发送文本、发送项目内置图片和戳一戳这类高频轻量动作。
 
 前端入口设计建议：
 

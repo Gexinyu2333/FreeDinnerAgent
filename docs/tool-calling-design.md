@@ -347,22 +347,18 @@ INSERT INTO tool_definitions (
 
 ## 12. 第一批工具
 
-MVP 阶段建议先实现：
+MVP 阶段已经实现：
 
 - `save_profile_memory`：保存用户画像记忆。
 - `search_memory`：检索多层记忆。
 - `create_task`：创建任务。
 - `list_tasks`：查询任务。
-- `update_task`：更新任务状态。
-- `create_scheduled_agent_job`：创建每日简报、每周回顾、跟进监控等心跳任务。
-- `list_scheduled_agent_jobs`：查询心跳任务。
-- `run_scheduled_agent_job`：立即运行一次心跳任务。
-- `send_channel_message`：通过 QQ、Telegram、Discord、飞书等渠道发送消息。
-- `list_channel_messages`：读取用户授权渠道中的最近消息。
-- `get_channel_members`：查询群聊或频道成员。
-- `ingest_document`：导入文档到 Semantic Memory。
-- `search_semantic_memory`：检索知识库。
-- `summarize_text`：总结长文本。
+- `run_workspace_command`：在用户 Workspace 内执行受限命令。
+- `napcatqq_send_text`：仅在 NapCatQQ Channel 会话中向当前 QQ 群聊或私聊发送文本。
+- `napcatqq_send_picture`：仅在 NapCatQQ Channel 会话中发送 `backend/internal/tool/picture` 下的内置图片。
+- `napcatqq_poke`：仅在 NapCatQQ Channel 会话中对指定 QQ 用户执行戳一戳。
+
+其中 `napcatqq_*` 工具属于上下文限定工具：Tool Router 会检查当前 conversation 是否为 `source = channel` 且带有 channel connection，只有满足条件时才把这些工具暴露给 Agent。普通 Web Chat 不会看到 NapCatQQ 工具，避免把外部入口能力误用于站内对话。
 
 ## 13. 小巧思：工具健康评分
 
@@ -374,10 +370,10 @@ NapCatQQ Channel Adapter
   -> 触发 Agent Turn
 
 NapCatQQ Tools / MCP
-  -> send_private_message
-  -> send_group_message
-  -> list_group_members
-  -> get_recent_messages
+  -> napcatqq_send_text
+  -> napcatqq_send_picture
+  -> napcatqq_poke
+  -> list_group_members / get_recent_messages 等高级 QQ 操作可继续由 MCP bridge 扩展
 ```
 
 这样 QQ、Telegram、Discord、飞书都能复用同一套入口与工具边界。

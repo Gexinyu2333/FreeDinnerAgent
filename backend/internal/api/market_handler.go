@@ -39,6 +39,32 @@ type createPromptTemplateRequest struct {
 	Variables   []promptTemplateVariableRequest `json:"variables"`
 }
 
+type createSkillRequest struct {
+	Name           string   `json:"name" binding:"required"`
+	Description    string   `json:"description" binding:"required"`
+	Keywords       []string `json:"keywords"`
+	ReactSteps     string   `json:"react_steps" binding:"required"`
+	OutputTemplate *string  `json:"output_template"`
+	Visibility     string   `json:"visibility"`
+	Category       string   `json:"category"`
+	Tags           []string `json:"tags"`
+}
+
+type createMCPServerRequest struct {
+	Name            string         `json:"name" binding:"required"`
+	DisplayName     string         `json:"display_name" binding:"required"`
+	Description     string         `json:"description" binding:"required"`
+	TransportType   string         `json:"transport_type"`
+	Endpoint        *string        `json:"endpoint"`
+	Command         *string        `json:"command"`
+	Args            []string       `json:"args"`
+	EnvSchema       map[string]any `json:"env_schema"`
+	Visibility      string         `json:"visibility"`
+	PermissionLevel string         `json:"permission_level"`
+	Category        string         `json:"category"`
+	Tags            []string       `json:"tags"`
+}
+
 type promptTemplateVariableRequest struct {
 	Name          string   `json:"name" binding:"required"`
 	DisplayName   string   `json:"display_name"`
@@ -207,6 +233,71 @@ func (h *MarketHandler) CreatePromptTemplate(c *gin.Context) {
 	})
 	if err != nil {
 		writeMarketError(c, err, "failed to create system prompt template")
+		return
+	}
+	OK(c, result)
+}
+
+func (h *MarketHandler) CreateSkill(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	var req createSkillRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	result, err := h.market.CreateSkill(c.Request.Context(), marketsvc.CreateSkillInput{
+		UserID:         userID,
+		Name:           req.Name,
+		Description:    req.Description,
+		Keywords:       req.Keywords,
+		ReactSteps:     req.ReactSteps,
+		OutputTemplate: req.OutputTemplate,
+		Visibility:     req.Visibility,
+		Category:       req.Category,
+		Tags:           req.Tags,
+	})
+	if err != nil {
+		writeMarketError(c, err, "failed to create skill")
+		return
+	}
+	OK(c, result)
+}
+
+func (h *MarketHandler) CreateMCPServer(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	var req createMCPServerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	if req.EnvSchema == nil {
+		req.EnvSchema = map[string]any{}
+	}
+	result, err := h.market.CreateMCPServer(c.Request.Context(), marketsvc.CreateMCPServerInput{
+		UserID:          userID,
+		Name:            req.Name,
+		DisplayName:     req.DisplayName,
+		Description:     req.Description,
+		TransportType:   req.TransportType,
+		Endpoint:        req.Endpoint,
+		Command:         req.Command,
+		Args:            req.Args,
+		EnvSchema:       req.EnvSchema,
+		Visibility:      req.Visibility,
+		PermissionLevel: req.PermissionLevel,
+		Category:        req.Category,
+		Tags:            req.Tags,
+	})
+	if err != nil {
+		writeMarketError(c, err, "failed to create mcp server")
 		return
 	}
 	OK(c, result)

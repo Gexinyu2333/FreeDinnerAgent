@@ -122,6 +122,81 @@ export type CreatePromptTemplateResult = {
   marketplace_item: MarketplaceItem;
 };
 
+export type Skill = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  trigger_keywords: string[];
+  visibility: string;
+  permission_level: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SkillVersion = {
+  id: string;
+  skill_id: string;
+  version: number;
+  react_steps: string;
+  output_template: string | null;
+  created_at: string;
+};
+
+export type CreateSkillInput = {
+  name: string;
+  description: string;
+  keywords?: string[];
+  react_steps: string;
+  output_template?: string | null;
+  visibility?: string;
+  category?: string;
+  tags?: string[];
+};
+
+export type CreateSkillResult = {
+  skill: Skill;
+  version: SkillVersion;
+  marketplace_item: MarketplaceItem;
+};
+
+export type MCPServerDefinition = {
+  id: string;
+  user_id: string | null;
+  name: string;
+  display_name: string;
+  description: string;
+  transport_type: string;
+  endpoint: string | null;
+  command: string | null;
+  visibility: string;
+  permission_level: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateMCPServerInput = {
+  name: string;
+  display_name: string;
+  description: string;
+  transport_type?: string;
+  endpoint?: string | null;
+  command?: string | null;
+  args?: string[];
+  env_schema?: Record<string, unknown>;
+  visibility?: string;
+  permission_level?: string;
+  category?: string;
+  tags?: string[];
+};
+
+export type CreateMCPServerResult = {
+  server: MCPServerDefinition;
+  marketplace_item: MarketplaceItem;
+};
+
 export type PromptPreview = {
   template: SystemPromptTemplate;
   version: SystemPromptTemplateVersion;

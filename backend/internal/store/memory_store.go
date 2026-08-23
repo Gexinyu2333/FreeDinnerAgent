@@ -224,6 +224,7 @@ type SkillDistillationInput struct {
 	Keywords       []string
 	ReactSteps     string
 	OutputTemplate *string
+	Visibility     string
 }
 
 type WorkingMemoryUpsert struct {

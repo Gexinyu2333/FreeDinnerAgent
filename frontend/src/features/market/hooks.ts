@@ -2,7 +2,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
   bindCapability,
+  createMCPServer,
   createPromptTemplate,
+  createSkill,
   forkPromptTemplate,
   installMarketplaceItem,
   listMarketplaceItems,
@@ -40,6 +42,18 @@ export function useBindCapability() {
 export function useCreatePromptTemplate() {
   return useMutation({
     mutationFn: createPromptTemplate
+  });
+}
+
+export function useCreateSkill() {
+  return useMutation({
+    mutationFn: createSkill
+  });
+}
+
+export function useCreateMCPServer() {
+  return useMutation({
+    mutationFn: createMCPServer
   });
 }
 

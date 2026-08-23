@@ -14,6 +14,8 @@ var ErrInvalidInput = errors.New("invalid market input")
 type Service struct {
 	market      *store.MarketStore
 	agentConfig *store.AgentConfigStore
+	memory      *store.MemoryStore
+	mcp         *store.MCPStore
 }
 
 type PromptVariableInput struct {
@@ -53,6 +55,45 @@ type CreatePromptTemplateResult struct {
 	Item     store.MarketplaceItem             `json:"marketplace_item"`
 }
 
+type CreateSkillInput struct {
+	UserID         string
+	Name           string
+	Description    string
+	Keywords       []string
+	ReactSteps     string
+	OutputTemplate *string
+	Visibility     string
+	Category       string
+	Tags           []string
+}
+
+type CreateSkillResult struct {
+	Skill   store.Skill           `json:"skill"`
+	Version store.SkillVersion    `json:"version"`
+	Item    store.MarketplaceItem `json:"marketplace_item"`
+}
+
+type CreateMCPServerInput struct {
+	UserID          string
+	Name            string
+	DisplayName     string
+	Description     string
+	TransportType   string
+	Endpoint        *string
+	Command         *string
+	Args            []string
+	EnvSchema       map[string]any
+	Visibility      string
+	PermissionLevel string
+	Category        string
+	Tags            []string
+}
+
+type CreateMCPServerResult struct {
+	Server store.MCPServerDefinition `json:"server"`
+	Item   store.MarketplaceItem     `json:"marketplace_item"`
+}
+
 type PreviewPromptInput struct {
 	UserID    string
 	VersionID string
@@ -75,6 +116,18 @@ type RateItemResult struct {
 
 func NewService(marketStore *store.MarketStore, agentConfig *store.AgentConfigStore) *Service {
 	return &Service{market: marketStore, agentConfig: agentConfig}
+}
+
+type Options struct {
+	Memory *store.MemoryStore
+	MCP    *store.MCPStore
+}
+
+func NewServiceWithOptions(marketStore *store.MarketStore, agentConfig *store.AgentConfigStore, options Options) *Service {
+	service := NewService(marketStore, agentConfig)
+	service.memory = options.Memory
+	service.mcp = options.MCP
+	return service
 }
 
 func (s *Service) ListItems(ctx context.Context, userID string, itemType *string, installedOnly bool, limit int) ([]store.MarketplaceItemView, error) {
@@ -160,6 +213,83 @@ func (s *Service) CreatePromptTemplate(ctx context.Context, input CreatePromptTe
 	return CreatePromptTemplateResult{Template: template, Version: version, Item: item}, nil
 }
 
+func (s *Service) CreateSkill(ctx context.Context, input CreateSkillInput) (CreateSkillResult, error) {
+	if s.memory == nil {
+		return CreateSkillResult{}, errors.New("memory store is not configured")
+	}
+	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Description) == "" {
+		return CreateSkillResult{}, fmt.Errorf("%w: skill name and description are required", ErrInvalidInput)
+	}
+	if strings.TrimSpace(input.ReactSteps) == "" {
+		return CreateSkillResult{}, fmt.Errorf("%w: react_steps is required", ErrInvalidInput)
+	}
+	result, err := s.memory.CreateManualSkill(ctx, store.SkillDistillationInput{
+		UserID:         input.UserID,
+		Name:           strings.TrimSpace(input.Name),
+		Description:    strings.TrimSpace(input.Description),
+		Keywords:       compactStrings(input.Keywords),
+		ReactSteps:     strings.TrimSpace(input.ReactSteps),
+		OutputTemplate: trimOptional(input.OutputTemplate),
+		Visibility:     normalizeVisibility(input.Visibility),
+	})
+	if err != nil {
+		return CreateSkillResult{}, err
+	}
+	item, err := s.market.UpsertMarketplaceItem(ctx, store.MarketplaceItem{
+		ItemType:    "skill",
+		RefID:       result.Skill.ID,
+		OwnerUserID: &input.UserID,
+		Visibility:  normalizeVisibility(input.Visibility),
+		Title:       result.Skill.Name,
+		Description: result.Skill.Description,
+		Category:    defaultString(input.Category, "skill"),
+		Tags:        compactStrings(input.Tags),
+	})
+	if err != nil {
+		return CreateSkillResult{}, err
+	}
+	return CreateSkillResult{Skill: result.Skill, Version: result.Version, Item: item}, nil
+}
+
+func (s *Service) CreateMCPServer(ctx context.Context, input CreateMCPServerInput) (CreateMCPServerResult, error) {
+	if s.mcp == nil {
+		return CreateMCPServerResult{}, errors.New("mcp store is not configured")
+	}
+	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.DisplayName) == "" || strings.TrimSpace(input.Description) == "" {
+		return CreateMCPServerResult{}, fmt.Errorf("%w: mcp name, display_name and description are required", ErrInvalidInput)
+	}
+	server, err := s.mcp.CreateServerDefinition(ctx, store.MCPServerDefinitionCreate{
+		UserID:          input.UserID,
+		Name:            strings.TrimSpace(input.Name),
+		DisplayName:     strings.TrimSpace(input.DisplayName),
+		Description:     strings.TrimSpace(input.Description),
+		TransportType:   normalizeMCPTransport(input.TransportType),
+		Endpoint:        trimOptional(input.Endpoint),
+		Command:         trimOptional(input.Command),
+		Args:            compactStrings(input.Args),
+		EnvSchema:       input.EnvSchema,
+		Visibility:      normalizeVisibility(input.Visibility),
+		PermissionLevel: normalizePermissionLevel(input.PermissionLevel),
+	})
+	if err != nil {
+		return CreateMCPServerResult{}, err
+	}
+	item, err := s.market.UpsertMarketplaceItem(ctx, store.MarketplaceItem{
+		ItemType:    "mcp_server",
+		RefID:       server.ID,
+		OwnerUserID: &input.UserID,
+		Visibility:  server.Visibility,
+		Title:       server.DisplayName,
+		Description: server.Description,
+		Category:    defaultString(input.Category, "mcp"),
+		Tags:        compactStrings(input.Tags),
+	})
+	if err != nil {
+		return CreateMCPServerResult{}, err
+	}
+	return CreateMCPServerResult{Server: server, Item: item}, nil
+}
+
 func (s *Service) ForkPromptTemplate(ctx context.Context, input ForkPromptTemplateInput) (CreatePromptTemplateResult, error) {
 	template, version, err := s.market.FindSystemPromptVersion(ctx, input.UserID, input.VersionID)
 	if err != nil {
@@ -239,4 +369,40 @@ func normalizeVisibility(value string) string {
 		return "public"
 	}
 	return "private"
+}
+
+func normalizeMCPTransport(value string) string {
+	switch strings.TrimSpace(value) {
+	case "stdio", "sse":
+		return strings.TrimSpace(value)
+	default:
+		return "http"
+	}
+}
+
+func normalizePermissionLevel(value string) string {
+	switch strings.TrimSpace(value) {
+	case "readonly", "sensitive", "destructive":
+		return strings.TrimSpace(value)
+	default:
+		return "normal"
+	}
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
+func trimOptional(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }

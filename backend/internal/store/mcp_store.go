@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -38,6 +39,21 @@ type MCPUserSetting struct {
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
+type MCPServerDefinitionCreate struct {
+	UserID          string
+	Name            string
+	DisplayName     string
+	Description     string
+	TransportType   string
+	Endpoint        *string
+	Command         *string
+	Args            []string
+	EnvSchema       map[string]any
+	Visibility      string
+	PermissionLevel string
+	Metadata        json.RawMessage
+}
+
 type EnabledMCPServer struct {
 	Definition MCPServerDefinition `json:"definition"`
 	Setting    MCPUserSetting      `json:"setting"`
@@ -49,6 +65,46 @@ type MCPStore struct {
 
 func NewMCPStore(db *pgxpool.Pool) *MCPStore {
 	return &MCPStore{db: db}
+}
+
+func (s *MCPStore) CreateServerDefinition(ctx context.Context, input MCPServerDefinitionCreate) (MCPServerDefinition, error) {
+	if len(input.Metadata) == 0 {
+		input.Metadata = json.RawMessage(`{}`)
+	}
+	envSchema, err := json.Marshal(input.EnvSchema)
+	if err != nil {
+		return MCPServerDefinition{}, err
+	}
+	if len(envSchema) == 0 || string(envSchema) == "null" {
+		envSchema = json.RawMessage(`{}`)
+	}
+	args, err := json.Marshal(input.Args)
+	if err != nil {
+		return MCPServerDefinition{}, err
+	}
+	return scanMCPServerDefinition(s.db.QueryRow(ctx, `
+		INSERT INTO mcp_server_definitions (
+			id, user_id, name, display_name, description, transport_type,
+			endpoint, command, args, env_schema, visibility, permission_level, metadata
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (user_id, name) DO UPDATE SET
+			display_name = EXCLUDED.display_name,
+			description = EXCLUDED.description,
+			transport_type = EXCLUDED.transport_type,
+			endpoint = EXCLUDED.endpoint,
+			command = EXCLUDED.command,
+			args = EXCLUDED.args,
+			env_schema = EXCLUDED.env_schema,
+			visibility = EXCLUDED.visibility,
+			permission_level = EXCLUDED.permission_level,
+			metadata = EXCLUDED.metadata,
+			status = 'active',
+			updated_at = NOW()
+		RETURNING id, user_id, name, display_name, description, transport_type,
+		       endpoint, command, visibility, permission_level, status, metadata, created_at, updated_at
+	`, uuid.NewString(), input.UserID, input.Name, input.DisplayName, input.Description, input.TransportType,
+		input.Endpoint, input.Command, args, envSchema, input.Visibility, input.PermissionLevel, input.Metadata))
 }
 
 func (s *MCPStore) ListEnabledServers(ctx context.Context, limit int) ([]EnabledMCPServer, error) {
@@ -92,4 +148,15 @@ func (s *MCPStore) ListEnabledServers(ctx context.Context, limit int) ([]Enabled
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func scanMCPServerDefinition(row pgx.Row) (MCPServerDefinition, error) {
+	var item MCPServerDefinition
+	err := row.Scan(&item.ID, &item.UserID, &item.Name, &item.DisplayName, &item.Description,
+		&item.TransportType, &item.Endpoint, &item.Command, &item.Visibility,
+		&item.PermissionLevel, &item.Status, &item.Metadata, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MCPServerDefinition{}, ErrNotFound
+	}
+	return item, err
 }

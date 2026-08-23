@@ -246,6 +246,8 @@
     },
     "tabs": {
       "browse": "Browse",
+      "mcp": "MCP Server",
+      "skill": "Skill",
       "systemPrompt": "System Prompt"
     },
     "visibility": {
@@ -274,6 +276,38 @@
         "tags": "Tags, comma separated",
         "variables": "Variable definition JSON array",
         "versionId": "Version ID",
+        "visibility": "Visibility"
+      }
+    },
+    "skill": {
+      "create": "Create Skill",
+      "created": "Skill created and listed",
+      "createTitle": "New Skill",
+      "fields": {
+        "description": "Description",
+        "keywords": "Trigger keywords, comma separated",
+        "name": "Unique name",
+        "outputTemplate": "Output template",
+        "reactSteps": "ReAct / workflow steps",
+        "tags": "Marketplace tags, comma separated",
+        "visibility": "Visibility"
+      }
+    },
+    "mcp": {
+      "create": "Create MCP Server",
+      "created": "MCP Server created and listed",
+      "createTitle": "New MCP Server",
+      "fields": {
+        "args": "Launch args, comma separated",
+        "command": "stdio command",
+        "description": "Description",
+        "displayName": "Display name",
+        "endpoint": "HTTP/SSE endpoint",
+        "envSchema": "Env Schema JSON",
+        "name": "Unique name",
+        "permission": "Permission level",
+        "tags": "Marketplace tags, comma separated",
+        "transport": "Transport type",
         "visibility": "Visibility"
       }
     }

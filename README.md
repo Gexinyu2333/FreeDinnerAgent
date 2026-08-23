@@ -231,9 +231,9 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 - Profile / Working / Episodic / Procedural / Semantic Memory 的核心表结构和后端读写检索；Semantic Memory 支持文档切片、关键词检索、embedding 开关和 pgvector 召回
 - Dreaming 规则版执行器和 insight 列表、应用、拒绝接口
 - 任务管理和心跳任务：每日简报、每周回顾、跟进监控模板，支持创建、查看、更新、暂停、恢复、删除、立即运行、运行记录和后台到期扫描 worker
-- Tool Registry / Tool Router / Tool Executor，内置任务、记忆、知识库和 Workspace CLI 工具；MCP metadata tool sync 和 HTTP MCP bridge `tools/call` 执行
-- 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork 和规则安全扫描
-- NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，人工外发草稿、outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环
+- Tool Registry / Tool Router / Tool Executor，内置任务、记忆、知识库、Workspace CLI 和 NapCatQQ Channel 限定工具；MCP metadata tool sync 和 HTTP MCP bridge `tools/call` 执行
+- 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork、Skill 创建、MCP Server Definition 创建和规则安全扫描
+- NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，人工外发草稿、outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环；Agent 在 NapCatQQ Channel 会话中可额外使用 `napcatqq_send_text`、`napcatqq_send_picture`、`napcatqq_poke`
 - Workspace 本地目录 MVP：启用、状态、文件读写、目录列表、受限 CLI 执行和审计日志
 - React 前端控制台：登录/注册、Web Chat、Providers、Agent Config、Memory、Knowledge、Market、Tools、Tasks、Channels、Workspace 页面已经接入真实 API；支持中文/英文切换、统一 loading/empty/error/toast 基础组件、统一表单 Field 组件和移动端侧边导航抽屉
 

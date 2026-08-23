@@ -148,3 +148,88 @@ func (s *MemoryStore) CreateSkillFromEpisode(ctx context.Context, input SkillDis
 	}
 	return SkillDistillationResult{Skill: skill, Version: version}, nil
 }
+
+func (s *MemoryStore) CreateManualSkill(ctx context.Context, input SkillDistillationInput) (SkillDistillationResult, error) {
+	if len(input.Keywords) == 0 {
+		input.Keywords = normalizedTags([]string{input.Name})
+	}
+	if strings.TrimSpace(input.ReactSteps) == "" {
+		input.ReactSteps = "1. 理解用户目标。\n2. 按 Skill 流程处理。\n3. 必要时调用工具。\n4. 输出结构化结果。"
+	}
+	visibility := "private"
+	if strings.TrimSpace(input.Visibility) == "public" {
+		visibility = "public"
+	}
+	metadata, _ := json.Marshal(map[string]any{"source": "manual_market"})
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return SkillDistillationResult{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	skill, err := scanSkill(tx.QueryRow(ctx, `
+		INSERT INTO skills (
+			id, user_id, name, description, trigger_keywords, scenario, visibility,
+			permission_level, success_count, metadata
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'normal', 0, $8)
+		ON CONFLICT (user_id, name) DO UPDATE SET
+			description = EXCLUDED.description,
+			trigger_keywords = EXCLUDED.trigger_keywords,
+			visibility = EXCLUDED.visibility,
+			metadata = EXCLUDED.metadata,
+			updated_at = NOW()
+		RETURNING id, user_id, name, description, trigger_keywords, scenario, visibility,
+		          permission_level, status, use_count, success_count, failure_count, metadata,
+		          created_at, updated_at
+	`, uuid.NewString(), input.UserID, strings.TrimSpace(input.Name), strings.TrimSpace(input.Description),
+		normalizedTags(input.Keywords), strings.TrimSpace(input.Description), visibility, metadata))
+	if err != nil {
+		return SkillDistillationResult{}, err
+	}
+
+	var nextVersion int
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM skill_versions WHERE skill_id = $1`, skill.ID).Scan(&nextVersion); err != nil {
+		return SkillDistillationResult{}, err
+	}
+	version, err := scanSkillVersion(tx.QueryRow(ctx, `
+		INSERT INTO skill_versions (
+			id, skill_id, version, react_steps, tool_sequence, output_template, fallback_strategy, created_from_episode_id
+		)
+		VALUES ($1, $2, $3, $4, '[]'::jsonb, $5, $6, NULL)
+		RETURNING id, skill_id, version, react_steps, tool_sequence, output_template,
+		          fallback_strategy, created_from_episode_id, created_at
+	`, uuid.NewString(), skill.ID, nextVersion, strings.TrimSpace(input.ReactSteps), input.OutputTemplate,
+		stringPtr("如果上下文不足，先向用户确认关键约束。")))
+	if err != nil {
+		return SkillDistillationResult{}, err
+	}
+	disclosures := []struct {
+		level   string
+		title   string
+		content string
+	}{
+		{"light", "适用场景", input.Description},
+		{"standard", "推荐流程", input.ReactSteps},
+		{"full", "完整技能", input.ReactSteps + "\n\n输出模板：\n" + derefString(input.OutputTemplate)},
+	}
+	for _, disclosure := range disclosures {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO skill_disclosure_sections (
+				id, skill_version_id, disclosure_level, title, content, token_count
+			)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (skill_version_id, disclosure_level) DO UPDATE SET
+				title = EXCLUDED.title,
+				content = EXCLUDED.content,
+				token_count = EXCLUDED.token_count
+		`, uuid.NewString(), version.ID, disclosure.level, disclosure.title, disclosure.content, estimateStoreTokens(disclosure.content))
+		if err != nil {
+			return SkillDistillationResult{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SkillDistillationResult{}, err
+	}
+	return SkillDistillationResult{Skill: skill, Version: version}, nil
+}

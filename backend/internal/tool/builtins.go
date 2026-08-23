@@ -26,6 +26,12 @@ func (s *Service) executeBuiltin(ctx context.Context, input ExecuteInput) (json.
 		result, err = s.searchMemory(ctx, input.UserID, input.Arguments)
 	case "run_workspace_command":
 		result, err = s.runWorkspaceCommand(ctx, input)
+	case "napcatqq_send_text":
+		result, err = s.sendNapCatText(ctx, input)
+	case "napcatqq_send_picture":
+		result, err = s.sendNapCatPicture(ctx, input)
+	case "napcatqq_poke":
+		result, err = s.pokeNapCatUser(ctx, input)
 	default:
 		err = ErrUnsupportedTool
 	}

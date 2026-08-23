@@ -9,6 +9,7 @@ import (
 
 	"freedinner/backend/internal/agent"
 	"freedinner/backend/internal/knowledge"
+	"freedinner/backend/internal/secret"
 	"freedinner/backend/internal/store"
 	workspacesvc "freedinner/backend/internal/workspace"
 )
@@ -19,13 +20,16 @@ var (
 )
 
 type Service struct {
-	tools      *store.ToolStore
-	agents     *store.AgentConfigStore
-	tasks      *store.TaskStore
-	memories   *store.MemoryStore
-	knowledge  *knowledge.Service
-	workspace  *workspacesvc.Service
-	httpClient *http.Client
+	tools         *store.ToolStore
+	agents        *store.AgentConfigStore
+	tasks         *store.TaskStore
+	memories      *store.MemoryStore
+	knowledge     *knowledge.Service
+	workspace     *workspacesvc.Service
+	channels      *store.ChannelStore
+	conversations *store.ConversationStore
+	crypto        secret.Crypto
+	httpClient    *http.Client
 }
 
 type ExecuteInput struct {
@@ -60,6 +64,24 @@ func NewService(tools *store.ToolStore, agents *store.AgentConfigStore, tasks *s
 		workspace:  workspaceService,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+type Options struct {
+	Channels      *store.ChannelStore
+	Conversations *store.ConversationStore
+	Crypto        secret.Crypto
+	HTTPClient    *http.Client
+}
+
+func NewServiceWithOptions(tools *store.ToolStore, agents *store.AgentConfigStore, tasks *store.TaskStore, memories *store.MemoryStore, knowledgeService *knowledge.Service, workspaceService *workspacesvc.Service, options Options) *Service {
+	service := NewService(tools, agents, tasks, memories, knowledgeService, workspaceService)
+	service.channels = options.Channels
+	service.conversations = options.Conversations
+	service.crypto = options.Crypto
+	if options.HTTPClient != nil {
+		service.httpClient = options.HTTPClient
+	}
+	return service
 }
 
 func (s *Service) EnsureBuiltins(ctx context.Context) error {

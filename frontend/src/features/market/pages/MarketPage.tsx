@@ -21,7 +21,9 @@ import { useAgentConfig } from "../../settings/hooks";
 import {
   marketplaceItemsQueryKey,
   useBindCapability,
+  useCreateMCPServer,
   useCreatePromptTemplate,
+  useCreateSkill,
   useForkPromptTemplate,
   useInstallMarketplaceItem,
   useMarketplaceItems,
@@ -30,11 +32,13 @@ import {
 } from "../hooks";
 import type {
   CapabilityType,
+  CreateMCPServerInput,
   CreatePromptTemplateInput,
+  CreateSkillInput,
   MarketplaceItem
 } from "../types";
 
-type MarketTab = "browse" | "systemPrompt";
+type MarketTab = "browse" | "systemPrompt" | "skill" | "mcp";
 
 const itemTypes: Array<{ value: "" | CapabilityType; key: string }> = [
   { value: "", key: "all" },
@@ -58,6 +62,32 @@ const initialPromptForm: CreatePromptTemplateInput = {
   variables: []
 };
 
+const initialSkillForm: CreateSkillInput = {
+  name: "",
+  description: "",
+  keywords: [],
+  react_steps: "",
+  output_template: "",
+  visibility: "private",
+  category: "skill",
+  tags: []
+};
+
+const initialMCPForm: CreateMCPServerInput = {
+  name: "",
+  display_name: "",
+  description: "",
+  transport_type: "http",
+  endpoint: "",
+  command: "",
+  args: [],
+  env_schema: {},
+  visibility: "private",
+  permission_level: "normal",
+  category: "mcp",
+  tags: []
+};
+
 export function MarketPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<MarketTab>("browse");
@@ -73,13 +103,17 @@ export function MarketPage() {
           activeKey={activeTab}
           items={[
             { key: "browse", label: t("market.tabs.browse") },
-            { key: "systemPrompt", label: t("market.tabs.systemPrompt") }
+            { key: "systemPrompt", label: t("market.tabs.systemPrompt") },
+            { key: "skill", label: t("market.tabs.skill") },
+            { key: "mcp", label: t("market.tabs.mcp") }
           ]}
           onChange={(key) => setActiveTab(key as MarketTab)}
         />
       </div>
       {activeTab === "browse" && <MarketplaceBrowser />}
       {activeTab === "systemPrompt" && <SystemPromptPanel />}
+      {activeTab === "skill" && <SkillPanel />}
+      {activeTab === "mcp" && <MCPPanel />}
     </section>
   );
 }
@@ -515,6 +549,183 @@ function SystemPromptPanel() {
         )}
       </aside>
     </div>
+  );
+}
+
+function SkillPanel() {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const createMutation = useCreateSkill();
+  const [form, setForm] = useState<CreateSkillInput>(initialSkillForm);
+  const [keywordsText, setKeywordsText] = useState("");
+  const [tagsText, setTagsText] = useState("");
+
+  function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    createMutation.mutate(
+      {
+        ...form,
+        keywords: splitTags(keywordsText),
+        tags: splitTags(tagsText),
+        output_template: form.output_template?.trim() || null
+      },
+      {
+        onSuccess: () => {
+          setForm(initialSkillForm);
+          setKeywordsText("");
+          setTagsText("");
+          void queryClient.invalidateQueries({ queryKey: marketplaceItemsQueryKey });
+          toast.notify(t("market.skill.created"));
+        }
+      }
+    );
+  }
+
+  return (
+    <form className="space-y-4 rounded-lg border border-ink-200 bg-white p-5 shadow-sm" onSubmit={handleCreate}>
+      {createMutation.error && (
+        <Toast
+          message={createMutation.error instanceof ApiError ? createMutation.error.message : t("market.errors.operationFailed")}
+          tone="error"
+        />
+      )}
+      <div className="flex items-center gap-2">
+        <PackageCheck className="h-5 w-5 text-ocean-600" />
+        <h2 className="text-base font-semibold text-ink-900">{t("market.skill.createTitle")}</h2>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label={t("market.skill.fields.name")}>
+          <Input onChange={(event) => setForm({ ...form, name: event.target.value })} required value={form.name} />
+        </Field>
+        <Field label={t("market.skill.fields.visibility")}>
+          <Select onChange={(event) => setForm({ ...form, visibility: event.target.value })} value={form.visibility}>
+            <option value="private">{t("market.visibility.private")}</option>
+            <option value="public">{t("market.visibility.public")}</option>
+          </Select>
+        </Field>
+      </div>
+      <Field label={t("market.skill.fields.description")}>
+        <Textarea onChange={(event) => setForm({ ...form, description: event.target.value })} required value={form.description} />
+      </Field>
+      <Field label={t("market.skill.fields.reactSteps")}>
+        <Textarea className="min-h-44" onChange={(event) => setForm({ ...form, react_steps: event.target.value })} required value={form.react_steps} />
+      </Field>
+      <Field label={t("market.skill.fields.outputTemplate")}>
+        <Textarea onChange={(event) => setForm({ ...form, output_template: event.target.value })} value={form.output_template ?? ""} />
+      </Field>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label={t("market.skill.fields.keywords")}>
+          <Input onChange={(event) => setKeywordsText(event.target.value)} value={keywordsText} />
+        </Field>
+        <Field label={t("market.skill.fields.tags")}>
+          <Input onChange={(event) => setTagsText(event.target.value)} value={tagsText} />
+        </Field>
+      </div>
+      <Button disabled={createMutation.isPending} type="submit">
+        {createMutation.isPending ? t("common.saving") : t("market.skill.create")}
+      </Button>
+    </form>
+  );
+}
+
+function MCPPanel() {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const createMutation = useCreateMCPServer();
+  const [form, setForm] = useState<CreateMCPServerInput>(initialMCPForm);
+  const [argsText, setArgsText] = useState("");
+  const [envSchemaText, setEnvSchemaText] = useState("{}");
+  const [tagsText, setTagsText] = useState("");
+
+  function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    createMutation.mutate(
+      {
+        ...form,
+        endpoint: form.endpoint?.trim() || null,
+        command: form.command?.trim() || null,
+        args: splitTags(argsText),
+        env_schema: parseJSON(envSchemaText, {}),
+        tags: splitTags(tagsText)
+      },
+      {
+        onSuccess: () => {
+          setForm(initialMCPForm);
+          setArgsText("");
+          setEnvSchemaText("{}");
+          setTagsText("");
+          void queryClient.invalidateQueries({ queryKey: marketplaceItemsQueryKey });
+          toast.notify(t("market.mcp.created"));
+        }
+      }
+    );
+  }
+
+  return (
+    <form className="space-y-4 rounded-lg border border-ink-200 bg-white p-5 shadow-sm" onSubmit={handleCreate}>
+      {createMutation.error && (
+        <Toast
+          message={createMutation.error instanceof ApiError ? createMutation.error.message : t("market.errors.operationFailed")}
+          tone="error"
+        />
+      )}
+      <div className="flex items-center gap-2">
+        <PackageCheck className="h-5 w-5 text-ocean-600" />
+        <h2 className="text-base font-semibold text-ink-900">{t("market.mcp.createTitle")}</h2>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label={t("market.mcp.fields.name")}>
+          <Input onChange={(event) => setForm({ ...form, name: event.target.value })} required value={form.name} />
+        </Field>
+        <Field label={t("market.mcp.fields.displayName")}>
+          <Input onChange={(event) => setForm({ ...form, display_name: event.target.value })} required value={form.display_name} />
+        </Field>
+        <Field label={t("market.mcp.fields.transport")}>
+          <Select onChange={(event) => setForm({ ...form, transport_type: event.target.value })} value={form.transport_type}>
+            <option value="http">HTTP</option>
+            <option value="sse">SSE</option>
+            <option value="stdio">stdio</option>
+          </Select>
+        </Field>
+        <Field label={t("market.mcp.fields.permission")}>
+          <Select onChange={(event) => setForm({ ...form, permission_level: event.target.value })} value={form.permission_level}>
+            <option value="readonly">readonly</option>
+            <option value="normal">normal</option>
+            <option value="sensitive">sensitive</option>
+            <option value="destructive">destructive</option>
+          </Select>
+        </Field>
+        <Field label={t("market.mcp.fields.visibility")}>
+          <Select onChange={(event) => setForm({ ...form, visibility: event.target.value })} value={form.visibility}>
+            <option value="private">{t("market.visibility.private")}</option>
+            <option value="public">{t("market.visibility.public")}</option>
+          </Select>
+        </Field>
+        <Field label={t("market.mcp.fields.endpoint")}>
+          <Input onChange={(event) => setForm({ ...form, endpoint: event.target.value })} value={form.endpoint ?? ""} />
+        </Field>
+        <Field label={t("market.mcp.fields.command")}>
+          <Input onChange={(event) => setForm({ ...form, command: event.target.value })} value={form.command ?? ""} />
+        </Field>
+        <Field label={t("market.mcp.fields.args")}>
+          <Input onChange={(event) => setArgsText(event.target.value)} value={argsText} />
+        </Field>
+      </div>
+      <Field label={t("market.mcp.fields.description")}>
+        <Textarea onChange={(event) => setForm({ ...form, description: event.target.value })} required value={form.description} />
+      </Field>
+      <Field label={t("market.mcp.fields.envSchema")}>
+        <Textarea className="font-mono" onChange={(event) => setEnvSchemaText(event.target.value)} value={envSchemaText} />
+      </Field>
+      <Field label={t("market.mcp.fields.tags")}>
+        <Input onChange={(event) => setTagsText(event.target.value)} value={tagsText} />
+      </Field>
+      <Button disabled={createMutation.isPending} type="submit">
+        {createMutation.isPending ? t("common.saving") : t("market.mcp.create")}
+      </Button>
+    </form>
   );
 }
 

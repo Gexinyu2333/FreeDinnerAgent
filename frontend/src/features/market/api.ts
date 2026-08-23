@@ -4,8 +4,12 @@ import type {
   AgentCapabilityBinding,
   BindCapabilityInput,
   CapabilityInstall,
+  CreateMCPServerInput,
+  CreateMCPServerResult,
   CreatePromptTemplateInput,
   CreatePromptTemplateResult,
+  CreateSkillInput,
+  CreateSkillResult,
   MarketplaceItem,
   PromptPreview
 } from "./types";
@@ -50,6 +54,20 @@ export function setCapabilityBindingEnabled(input: { id: string; enabled: boolea
 
 export function createPromptTemplate(input: CreatePromptTemplateInput) {
   return apiClient<CreatePromptTemplateResult>("/system-prompt-templates", {
+    method: "POST",
+    body: input
+  });
+}
+
+export function createSkill(input: CreateSkillInput) {
+  return apiClient<CreateSkillResult>("/skills", {
+    method: "POST",
+    body: input
+  });
+}
+
+export function createMCPServer(input: CreateMCPServerInput) {
+  return apiClient<CreateMCPServerResult>("/mcp-server-definitions", {
     method: "POST",
     body: input
   });

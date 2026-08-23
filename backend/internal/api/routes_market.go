@@ -14,4 +14,6 @@ func registerMarketRoutes(router *gin.RouterGroup, h Handlers) {
 	router.POST("/system-prompt-templates", h.Market.CreatePromptTemplate)
 	router.POST("/system-prompt-templates/preview", h.Market.PreviewPromptTemplate)
 	router.POST("/system-prompt-template-versions/:version_id/fork", h.Market.ForkPromptTemplate)
+	router.POST("/skills", h.Market.CreateSkill)
+	router.POST("/mcp-server-definitions", h.Market.CreateMCPServer)
 }

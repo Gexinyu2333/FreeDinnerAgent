@@ -41,7 +41,10 @@ func NewHandler(deps Dependencies) http.Handler {
 	authService := auth.NewService(stores.Users, stores.Sessions, deps.Config.JWTSecret)
 	contextBuilder := contextmgr.NewBuilder(stores.Contexts)
 	contextCompressor := contextmgr.NewCompressor(stores.Contexts)
-	marketService := marketsvc.NewService(stores.Market, stores.AgentConfigs)
+	marketService := marketsvc.NewServiceWithOptions(stores.Market, stores.AgentConfigs, marketsvc.Options{
+		Memory: stores.Memory,
+		MCP:    stores.MCP,
+	})
 	knowledgeService := knowledge.NewService(stores.Knowledge, stores.AgentConfigs, stores.ModelProviders, crypto, openAIClient)
 	memoryManager := memorysvc.NewManager(stores.Memory, semanticMemoryAdapter{knowledge: knowledgeService})
 
@@ -52,7 +55,19 @@ func NewHandler(deps Dependencies) http.Handler {
 		SandboxImage: deps.Config.WorkspaceSandboxImage,
 	})
 
-	toolService := toolsvc.NewService(stores.Tools, stores.AgentConfigs, stores.Tasks, stores.Memory, knowledgeService, workspaceService)
+	toolService := toolsvc.NewServiceWithOptions(
+		stores.Tools,
+		stores.AgentConfigs,
+		stores.Tasks,
+		stores.Memory,
+		knowledgeService,
+		workspaceService,
+		toolsvc.Options{
+			Channels:      stores.Channels,
+			Conversations: stores.Conversations,
+			Crypto:        crypto,
+		},
+	)
 	_ = toolService.EnsureBuiltins(context.Background())
 	_, _ = mcp.NewRuntime().SyncConfiguredTools(context.Background(), stores.MCP, stores.Tools, 200)
 	_ = syncToolMarketplaceItems(context.Background(), stores.Market, stores.Tools)

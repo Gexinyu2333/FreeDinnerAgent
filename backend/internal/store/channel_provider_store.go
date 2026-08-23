@@ -56,3 +56,13 @@ func (s *ChannelStore) ListProviders(ctx context.Context) ([]ChannelProviderDefi
 	}
 	return providers, rows.Err()
 }
+
+func (s *ChannelStore) FindProviderForConnection(ctx context.Context, userID, connectionID string) (ChannelProviderDefinition, error) {
+	return scanChannelProvider(s.db.QueryRow(ctx, `
+		SELECT p.id, p.name, p.display_name, p.description, p.provider_type, p.adapter_type, p.inbound_modes,
+			p.outbound_modes, p.config_schema, p.default_policy, p.visibility, p.status, p.metadata, p.created_at, p.updated_at
+		FROM channel_connections c
+		JOIN channel_provider_definitions p ON p.id = c.provider_id
+		WHERE c.id = $1 AND c.user_id = $2 AND c.status <> 'deleted' AND p.status = 'active'
+	`, connectionID, userID))
+}
