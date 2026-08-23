@@ -147,8 +147,10 @@ export function ChannelsPage() {
   const isCreatingConnection = params.connectionId === "new";
   const selectedConnectionID = isCreatingConnection ? undefined : params.connectionId || connections[0]?.id;
   const selectedConnection = connections.find((item) => item.id === selectedConnectionID);
-  const activeSection = normalizeChannelSection(params.section);
   const selectedExternalConversationID = params.externalConversationId;
+  const activeSection = selectedExternalConversationID
+    ? "sessions"
+    : normalizeChannelSection(params.section);
   const policiesQuery = useChannelPolicies(selectedConnectionID);
   const externalConversationsQuery = useExternalConversations(selectedConnectionID);
   const externalMessagesQuery = useExternalConversationMessages(
@@ -186,15 +188,35 @@ export function ChannelsPage() {
 
   useEffect(() => {
     if (!params.connectionId && connections[0]) {
-      navigate(`/app/channels/${connections[0].id}/overview`, { replace: true });
+      navigate(`/app/channels/${connections[0].id}/sessions`, { replace: true });
     }
   }, [connections, navigate, params.connectionId]);
 
   useEffect(() => {
-    if (params.connectionId && !params.section) {
-      navigate(`/app/channels/${params.connectionId}/overview`, { replace: true });
+    if (params.connectionId && !params.section && !selectedExternalConversationID) {
+      navigate(`/app/channels/${params.connectionId}/sessions`, { replace: true });
     }
-  }, [navigate, params.connectionId, params.section]);
+  }, [navigate, params.connectionId, params.section, selectedExternalConversationID]);
+
+  useEffect(() => {
+    if (
+      selectedConnectionID &&
+      activeSection === "sessions" &&
+      !selectedExternalConversationID &&
+      externalConversations[0]
+    ) {
+      navigate(
+        `/app/channels/${selectedConnectionID}/sessions/${externalConversations[0].external_conversation_id}`,
+        { replace: true }
+      );
+    }
+  }, [
+    activeSection,
+    externalConversations,
+    navigate,
+    selectedConnectionID,
+    selectedExternalConversationID
+  ]);
 
   useEffect(() => {
     if (
@@ -517,7 +539,7 @@ export function ChannelsPage() {
               setConnectionDialogOpen(true);
               navigate("/app/channels/new/setup");
             }}
-            onSelect={(connectionID) => navigate(`/app/channels/${connectionID}/overview`)}
+            onSelect={(connectionID) => navigate(`/app/channels/${connectionID}/sessions`)}
             selectedConnectionID={selectedConnectionID}
           />
         </div>
@@ -1688,7 +1710,11 @@ function ChannelInboundStream({
       <div className="mt-3 max-h-96 space-y-3 overflow-auto pr-1">
         {events.length === 0 && fallbackMessages.length === 0 ? (
           <p className="text-sm text-ink-500">{t("channels.sessions.noInbound")}</p>
-        ) : events.length > 0 ? (
+        ) : fallbackMessages.length > 0 ? (
+          fallbackMessages.map((message) => (
+            <ChannelTranscriptItem key={message.id} message={message} />
+          ))
+        ) : (
           events.map((event) => (
             <div className="min-w-0 rounded-md border border-ink-100 bg-white p-3" key={event.id}>
               <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
@@ -1702,10 +1728,6 @@ function ChannelInboundStream({
                 {summarizeChannelText(event.normalized_text)}
               </p>
             </div>
-          ))
-        ) : (
-          fallbackMessages.map((message) => (
-            <ChannelTranscriptItem key={message.id} message={message} />
           ))
         )}
       </div>
@@ -1737,7 +1759,11 @@ function ChannelOutboundStream({
       <div className="mt-3 max-h-96 space-y-3 overflow-auto pr-1">
         {messages.length === 0 && fallbackMessages.length === 0 ? (
           <p className="text-sm text-ink-500">{t("channels.sessions.noOutbound")}</p>
-        ) : messages.length > 0 ? (
+        ) : fallbackMessages.length > 0 ? (
+          fallbackMessages.map((message) => (
+            <ChannelTranscriptItem key={message.id} message={message} />
+          ))
+        ) : (
           messages.map((message) => (
             <div className="min-w-0 rounded-md border border-ink-100 bg-white p-3" key={message.id}>
               <div className="flex flex-wrap items-center gap-2 text-xs text-ink-500">
@@ -1757,10 +1783,6 @@ function ChannelOutboundStream({
                 </p>
               )}
             </div>
-          ))
-        ) : (
-          fallbackMessages.map((message) => (
-            <ChannelTranscriptItem key={message.id} message={message} />
           ))
         )}
       </div>

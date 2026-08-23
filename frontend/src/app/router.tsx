@@ -95,11 +95,11 @@ export const router = createBrowserRouter([
         element: <ChannelsPage />
       },
       {
-        path: "channels/:connectionId/:section",
+        path: "channels/:connectionId/sessions/:externalConversationId",
         element: <ChannelsPage />
       },
       {
-        path: "channels/:connectionId/sessions/:externalConversationId",
+        path: "channels/:connectionId/:section",
         element: <ChannelsPage />
       },
       { path: "workspace", element: <WorkspacePage /> },

@@ -104,6 +104,8 @@ Channel 会话会同步保存 `channel_connection_id`、`external_conversation_i
 - 输出 / Agent Outbox：展示 `channel_outbox_messages`，用于确认 Agent 或人工准备发出去的内容、审批状态、发送状态和失败原因。
 - 完整转录：折叠展示本地 `messages`，用于审计 Agent Loop 看到的上下文，不作为主要交互入口。
 
+产品入口上，用户点击某个 Channel connection 时默认进入 Sessions，而不是 Overview。Overview 只展示最近输入、最近输出和外部会话数量；完整历史记录需要进入具体外部会话，例如某个 QQ 群、私聊或未来的 Discord channel / WeChat chat。
+
 ### 3.4 Inbox / Outbox
 
 `channel_inbox_events` 保存外部平台进来的原始事件和规范化文本。
@@ -310,7 +312,7 @@ NapCatQQ MCP Server
 - 已提供 Channel transcript 接口：`GET /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/messages`，用于在 Channels 页面查看只读外部会话的完整转录。
 - 已提供人工外发草稿接口：`POST /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/outbox-drafts`，用于从只读 transcript 创建 Outbox 草稿。
 - Channels 前端已按 provider `metadata.form` 渲染连接配置字段；NapCatQQ 只是内置 provider，后续新增 WeChat / Discord / Telegram / 飞书 provider definition 时，可通过新增 endpoint schema 与 adapter 扩展，不需要给核心 conversation/chat 表加平台专属字段。
-- Channels 前端已拆出 Overview、Setup、Policies、Sessions、Inbox、Outbox 和 Logs；Inbox raw payload 默认折叠展示，Session 页面按“输入 / 外部消息”和“输出 / Agent Outbox”分开展示，完整 transcript 折叠展示，人工回复进入 Outbox 草稿。
+- Channels 前端已拆出 Overview、Setup、Policies、Sessions、Inbox、Outbox 和 Logs；点击连接默认进入 Sessions 并自动选中最近外部会话，Overview 只做摘要；Inbox raw payload 默认折叠展示，Session 页面按“输入 / 外部消息”和“输出 / Agent 回复”分开展示，完整 transcript 折叠展示，人工回复进入 Outbox 草稿。
 - 服务启动时可按 `CHANNEL_SENDER_ENABLED`、`CHANNEL_SENDER_INTERVAL` 和 `CHANNEL_SENDER_BATCH_SIZE` 启动 outbox sender worker，自动发送 approved outbox。
 - OneBot 文本中的图片、文件、语音、视频和卡片 CQ 码会被归一化为附件摘要，避免在 normalized text 中保存敏感 URL 或原始附件参数。
 - 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截，并支持在 policy metadata 中配置多窗口 `rate_limits`、用户级 `user_rate_limits` 和 `circuit_breaker` 熔断。
