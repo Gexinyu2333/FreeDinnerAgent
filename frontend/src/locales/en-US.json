@@ -43,17 +43,19 @@
     "delete": "Delete",
     "edit": "Edit",
     "empty": "No content",
+    "errorTitle": "Request failed",
     "loading": "Loading",
-    "mvpShellReady": "MVP page shell is ready",
-    "pageWillBeImplemented": "This page will connect to real APIs and workflows in later steps. Step F1 focuses on routing, layout, and foundation state.",
+    "mvpShellReady": "Placeholder page is ready",
+    "pageWillBeImplemented": "This page is kept as a development placeholder for richer runtime logs and audit views.",
+    "placeholder": "Placeholder",
     "disabled": "Disabled",
     "enabled": "Enabled",
     "reset": "Reset",
     "refresh": "Refresh",
+    "retry": "Retry",
     "save": "Save",
     "saving": "Saving",
-    "search": "Search",
-    "stepF1": "Step F1"
+    "search": "Search"
   },
   "memory": {
     "description": "Maintain profile memories, inspect what context retrieval injects, and handle Dreaming candidate insights.",
@@ -596,6 +598,84 @@
       "newConversationPlaceholder": "New conversation",
       "newConversationTitle": "Conversation title",
       "title": "Conversations"
+    }
+  },
+  "workspace": {
+    "description": "Enable the user workspace, edit files, and run constrained commands.",
+    "enabled": "Workspace enabled",
+    "title": "Workspace",
+    "empty": {
+      "action": "Enabling creates an isolated user directory under the backend WORKSPACE_ROOT.",
+      "description": "Workspace lets the Agent process files, run allowlisted commands, and keep an audit trail inside a constrained directory.",
+      "title": "Workspace is not enabled"
+    },
+    "errors": {
+      "operationFailed": "Workspace operation failed"
+    },
+    "fields": {
+      "args": "Arguments",
+      "command": "Command",
+      "content": "Content",
+      "cpuLimit": "CPU limit",
+      "destroyHours": "Destroy after hours",
+      "idleMinutes": "Idle after minutes",
+      "maxCommandSeconds": "Command timeout seconds",
+      "maxDiskMB": "Disk limit MB",
+      "maxFileCount": "File count limit",
+      "maxSingleFileMB": "Single file limit MB",
+      "maxStderrKB": "stderr preview KB",
+      "maxStdoutKB": "stdout preview KB",
+      "memoryMB": "Memory limit MB",
+      "networkAllowlist": "Network allowlist",
+      "networkPolicy": "Network policy",
+      "path": "Path",
+      "sandboxType": "Sandbox type",
+      "timeout": "Timeout seconds",
+      "workingDir": "Working directory"
+    },
+    "network": {
+      "allowlist": "Allowlist",
+      "disabled": "Disabled",
+      "open": "Open"
+    },
+    "summary": {
+      "commands": "Commands",
+      "disk": "Disk",
+      "files": "{{fileCount}} / {{fileLimit}} files",
+      "network": "Network: {{policy}}",
+      "sandbox": "Sandbox",
+      "timeout": "Max {{seconds}} seconds per command"
+    },
+    "policy": {
+      "enable": "Enable Workspace",
+      "enableTitle": "Enable settings",
+      "save": "Save policy",
+      "saved": "Workspace policy saved",
+      "title": "Resource and Isolation Policy"
+    },
+    "files": {
+      "directory": "Directory",
+      "editor": "File editor",
+      "read": "Read file",
+      "reading": "Reading",
+      "saved": "File written",
+      "title": "Files",
+      "write": "Write file",
+      "empty": {
+        "description": "This directory is empty. Write a test file from the editor.",
+        "title": "Directory is empty"
+      }
+    },
+    "commands": {
+      "empty": {
+        "description": "Run an allowlisted command to see stdout, stderr, exit code, and duration here.",
+        "title": "No command runs yet"
+      },
+      "finished": "Command finished",
+      "history": "Command history",
+      "run": "Run command",
+      "running": "Running",
+      "title": "Constrained command"
     }
   },
   "layout": {

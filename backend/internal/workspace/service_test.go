@@ -37,6 +37,13 @@ func TestResolveRawScopesPathsUnderFilesDirectory(t *testing.T) {
 	}
 }
 
+func TestNewServiceNormalizesWorkspaceRootToAbsolutePath(t *testing.T) {
+	service := NewService(nil, "./.workspaces", RunnerOptions{})
+	if !filepath.IsAbs(service.root) {
+		t.Fatalf("expected absolute workspace root, got %q", service.root)
+	}
+}
+
 func TestCommandPolicyBlocksUnsafeCommandsAndArgs(t *testing.T) {
 	if isAllowedCommand("rm", []string{"notes/todo.md"}) {
 		t.Fatal("rm should not be allowed")

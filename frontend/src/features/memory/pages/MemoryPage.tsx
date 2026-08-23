@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Field } from "../../../components/ui/Field";
 import { Input } from "../../../components/ui/Input";
 import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
@@ -523,15 +524,6 @@ function DreamingInsightsPanel() {
         </div>
       )}
     </div>
-  );
-}
-
-function Field({ children, label }: { children: React.ReactNode; label: string }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-ink-700">{label}</span>
-      {children}
-    </label>
   );
 }
 

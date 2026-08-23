@@ -1,15 +1,15 @@
 # Backend
 
-本目录用于存放 FreeDinnerAgent 的 Go 后端服务。
+本目录是 FreeDinnerAgent 的 Go 后端服务，当前已经实现用户鉴权、Agent Loop、记忆系统、工具调用、心跳任务、能力市场、NapCat / OneBot Channel、Workspace 和 PostgreSQL 数据访问。
 
-计划技术栈：
+技术栈：
 
 - Go
 - Gin
 - PostgreSQL Driver
 - LLM API Client
 
-核心模块规划：
+核心模块：
 
 - `cmd/server`：服务启动入口
 - `internal/app`：组合根，负责依赖组装、内置能力同步和后台 worker 启动
@@ -65,11 +65,18 @@
 
 `internal/store` 的 Harness 部分按 Agent Turn 生命周期拆分：`harness_store.go` 只保留 turn/event/loop/validation/fallback 类型，`harness_turn_store.go` 管 turn 创建、启动、完成和读取，`harness_event_store.go` 管事件追加和列表，`harness_loop_store.go` 管 loop step，`harness_reliability_store.go` 管 validation/fallback 记录，`harness_scan.go` 管 scan helper。
 
-后续运行命令建议：
+本地运行：
 
 ```bash
 go mod tidy
 go run ./cmd/server
+```
+
+质量检查：
+
+```bash
+git diff --check
+go test ./...
 ```
 
 可选环境变量：
@@ -87,7 +94,7 @@ CHANNEL_SENDER_INTERVAL=15s
 CHANNEL_SENDER_BATCH_SIZE=20
 ```
 
-本地开发默认使用 `./.workspaces` 和 `local_dir` sandbox。Linux 部署时可以把 `WORKSPACE_ROOT` 改成 `/var/lib/freedinner/workspaces`，再将用户 workspace 的 `sandbox_type` 配成 `docker`、`podman` 或 `nsjail`。这些 runtime 不会在本地开发时自动启动，只有对应用户启用对应 sandbox 类型时才会被调用。
+本地开发默认使用 `./.workspaces` 和 `local_dir` sandbox。Linux 部署时可以把 `WORKSPACE_ROOT` 改成 `/var/lib/freedinner/workspaces`，再将用户 workspace 的 `sandbox_type` 配成 `docker`、`podman` 或 `nsjail`。这些 runtime 不会在本地开发时自动启动，只有对应用户启用对应 sandbox 类型时才会被调用。生产环境开放 CLI 前必须启用强隔离和配额策略。
 
 ## 当前已实现接口
 

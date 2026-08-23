@@ -43,17 +43,19 @@
     "delete": "删除",
     "edit": "编辑",
     "empty": "暂无内容",
+    "errorTitle": "请求失败",
     "loading": "加载中",
-    "mvpShellReady": "MVP 页面骨架已就绪",
-    "pageWillBeImplemented": "这个页面会在后续 Step 中接入真实接口和交互。当前阶段先完成路由、布局和基础状态。",
+    "mvpShellReady": "页面占位已就绪",
+    "pageWillBeImplemented": "这个页面当前作为开发占位保留，后续可继续接入更细的运行日志和审计视图。",
+    "placeholder": "开发占位",
     "disabled": "关闭",
     "enabled": "开启",
     "reset": "重置",
     "refresh": "刷新",
+    "retry": "重试",
     "save": "保存",
     "saving": "保存中",
-    "search": "搜索",
-    "stepF1": "Step F1"
+    "search": "搜索"
   },
   "memory": {
     "description": "维护画像记忆，查看一次检索会拼入哪些上下文，并处理 Dreaming 产生的候选 insight。",
@@ -596,6 +598,84 @@
       "newConversationPlaceholder": "新的对话",
       "newConversationTitle": "会话标题",
       "title": "会话"
+    }
+  },
+  "workspace": {
+    "description": "启用用户级工作目录，读写文件，并执行受限命令。",
+    "enabled": "Workspace 已启用",
+    "title": "Workspace",
+    "empty": {
+      "action": "启用后会在后端配置的 WORKSPACE_ROOT 下创建用户隔离目录。",
+      "description": "Workspace 让 Agent 可以在受限目录里处理文件、运行白名单命令，并留下审计记录。",
+      "title": "还没有启用 Workspace"
+    },
+    "errors": {
+      "operationFailed": "Workspace 操作失败"
+    },
+    "fields": {
+      "args": "参数",
+      "command": "命令",
+      "content": "内容",
+      "cpuLimit": "CPU 限制",
+      "destroyHours": "销毁时间（小时）",
+      "idleMinutes": "闲置时间（分钟）",
+      "maxCommandSeconds": "命令超时（秒）",
+      "maxDiskMB": "磁盘上限（MB）",
+      "maxFileCount": "文件数上限",
+      "maxSingleFileMB": "单文件上限（MB）",
+      "maxStderrKB": "stderr 预览（KB）",
+      "maxStdoutKB": "stdout 预览（KB）",
+      "memoryMB": "内存限制（MB）",
+      "networkAllowlist": "网络白名单",
+      "networkPolicy": "网络策略",
+      "path": "路径",
+      "sandboxType": "Sandbox 类型",
+      "timeout": "超时秒数",
+      "workingDir": "工作目录"
+    },
+    "network": {
+      "allowlist": "白名单",
+      "disabled": "禁用",
+      "open": "开放"
+    },
+    "summary": {
+      "commands": "命令",
+      "disk": "磁盘",
+      "files": "{{fileCount}} / {{fileLimit}} 个文件",
+      "network": "网络：{{policy}}",
+      "sandbox": "Sandbox",
+      "timeout": "单次命令最多 {{seconds}} 秒"
+    },
+    "policy": {
+      "enable": "启用 Workspace",
+      "enableTitle": "启用配置",
+      "save": "保存策略",
+      "saved": "Workspace 策略已保存",
+      "title": "资源与隔离策略"
+    },
+    "files": {
+      "directory": "目录",
+      "editor": "文件读写",
+      "read": "读取文件",
+      "reading": "读取中",
+      "saved": "文件已写入",
+      "title": "文件列表",
+      "write": "写入文件",
+      "empty": {
+        "description": "当前目录下没有文件。可以先在右侧写入一个测试文件。",
+        "title": "目录为空"
+      }
+    },
+    "commands": {
+      "empty": {
+        "description": "执行一次白名单命令后，这里会展示 stdout、stderr、退出码和耗时。",
+        "title": "还没有命令记录"
+      },
+      "finished": "命令执行完成",
+      "history": "命令历史",
+      "run": "执行命令",
+      "running": "执行中",
+      "title": "受限命令"
     }
   },
   "layout": {

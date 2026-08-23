@@ -32,6 +32,8 @@ PostgreSQL
 
 ## 3. 前端设计
 
+当前 React 前端已经完成控制台 MVP：Auth、Web Chat、Providers、Agent Config、Memory、Knowledge、Market、Tools、Tasks、Channels 和 Workspace 页面均已接入真实 API；支持中文/英文切换、统一状态组件、统一表单组件和移动端侧边导航。
+
 前端核心页面：
 
 - 对话工作台：左侧会话列表，中间聊天窗口，右侧显示本次使用到的记忆和工具调用结果。

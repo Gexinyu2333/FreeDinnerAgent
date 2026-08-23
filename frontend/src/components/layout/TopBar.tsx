@@ -8,7 +8,11 @@ import { clearTokens } from "../../lib/authToken";
 import { changeLocale } from "../../lib/i18n";
 import { queryClient } from "../../lib/queryClient";
 
-export function TopBar() {
+type TopBarProps = {
+  onOpenMenu: () => void;
+};
+
+export function TopBar({ onOpenMenu }: TopBarProps) {
   const { i18n, t } = useTranslation();
   const { data: currentUser } = useCurrentUser();
 
@@ -24,6 +28,7 @@ export function TopBar() {
         <button
           aria-label={t("layout.openMenu")}
           className="rounded-md p-2 text-ink-500 hover:bg-ink-100 lg:hidden"
+          onClick={onOpenMenu}
           type="button"
         >
           <Menu className="h-5 w-5" />

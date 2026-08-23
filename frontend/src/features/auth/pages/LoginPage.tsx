@@ -5,7 +5,9 @@ import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "../../../components/ui/Button";
+import { Field } from "../../../components/ui/Field";
 import { Input } from "../../../components/ui/Input";
+import { Toast } from "../../../components/ui/Toast";
 import { setTokens } from "../../../lib/authToken";
 import { ApiError } from "../../../lib/errors";
 import { queryClient } from "../../../lib/queryClient";
@@ -43,10 +45,7 @@ export function LoginPage() {
   return (
     <AuthLayout description={t("auth.login.description")} title={t("auth.login.title")}>
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink-700">
-            {t("auth.fields.username")}
-          </span>
+        <Field label={t("auth.fields.username")}>
           <Input
             autoComplete="username"
             onChange={(event) => setUsername(event.target.value)}
@@ -54,12 +53,9 @@ export function LoginPage() {
             required
             value={username}
           />
-        </label>
+        </Field>
 
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink-700">
-            {t("auth.fields.password")}
-          </span>
+        <Field label={t("auth.fields.password")}>
           <Input
             autoComplete="current-password"
             minLength={8}
@@ -69,13 +65,9 @@ export function LoginPage() {
             type="password"
             value={password}
           />
-        </label>
+        </Field>
 
-        {errorMessage && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {errorMessage}
-          </div>
-        )}
+        {errorMessage && <Toast message={errorMessage} tone="error" />}
 
         <Button
           className="w-full"

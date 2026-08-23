@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../../../components/ui/Button";
+import { Field } from "../../../components/ui/Field";
 import { Input } from "../../../components/ui/Input";
 import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
@@ -367,15 +368,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="text-base font-semibold text-ink-900">{title}</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-2">{children}</div>
     </section>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-2">
-      <span className="text-sm font-medium text-ink-700">{label}</span>
-      {children}
-    </label>
   );
 }
 

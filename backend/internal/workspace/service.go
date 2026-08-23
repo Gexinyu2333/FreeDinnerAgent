@@ -171,9 +171,13 @@ func (s *Service) Destroy(ctx context.Context, userID string, removeFiles bool) 
 }
 
 func NewService(workspaces *store.WorkspaceStore, root string, runners RunnerOptions) *Service {
+	cleanRoot, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		cleanRoot = filepath.Clean(root)
+	}
 	return &Service{
 		workspaces: workspaces,
-		root:       filepath.Clean(root),
+		root:       cleanRoot,
 		runners:    runners,
 	}
 }

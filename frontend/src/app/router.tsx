@@ -15,6 +15,7 @@ import { AgentConfigPage } from "../features/settings/pages/AgentConfigPage";
 import { ProvidersPage } from "../features/settings/pages/ProvidersPage";
 import { TasksPage } from "../features/tasks/pages/TasksPage";
 import { ToolsPage } from "../features/tools/pages/ToolsPage";
+import { WorkspacePage } from "../features/workspace/pages/WorkspacePage";
 import { getAccessToken } from "../lib/authToken";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -93,7 +94,7 @@ export const router = createBrowserRouter([
         path: "channels/:connectionId",
         element: <ChannelsPage />
       },
-      { path: "workspace", element: <PlaceholderPage pageKey="workspace" /> },
+      { path: "workspace", element: <WorkspacePage /> },
       { path: "logs", element: <PlaceholderPage pageKey="logs" /> }
     ]
   },

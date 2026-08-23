@@ -1,48 +1,74 @@
 # Frontend
 
-本目录存放 FreeDinnerAgent 的 React 前端项目，当前已经初始化为 Vite + React + TypeScript 工程。
+本目录是 FreeDinnerAgent 的 React 前端，使用 Vite + React + TypeScript 实现个人 Agent 控制台。`docs/frontend-design-plan.md` 中的 F1-F10 已完成，后续主要是体验打磨和高级项扩展。
 
-详细设计与分阶段实现计划见：
+## 技术栈
 
-- [../docs/frontend-design-plan.md](../docs/frontend-design-plan.md)
-
-技术栈：
-
-- React
-- TypeScript
-- Vite
+- React 19、TypeScript、Vite
 - React Router
 - TanStack Query
-- Zustand
 - Tailwind CSS
 - lucide-react
 - react-i18next
 
-当前页面与能力：
+## 当前页面
 
-- 登录与应用壳：提供基础登录态、侧边导航、中文/英文切换。
-- Web Chat 对话页面：展示用户主动发起的多轮聊天。
-- Settings 页面：配置用户级模型供应商、Agent 参数、thinking、temperature、embedding 和额外 LLM feature。
-- Channels 页面：选择 QQ/NapCat 等外部入口，管理连接、endpoint、监听策略、inbox、outbox、审批和发送状态。
-- 其它能力页面仍按 [../docs/frontend-design-plan.md](../docs/frontend-design-plan.md) 分阶段补齐。
+- Auth：注册、登录、退出、登录态守卫
+- Web Chat：会话列表、消息列表、发送消息、Agent 回复展示
+- Providers：用户级 OpenAI-compatible / Anthropic-compatible provider 配置，支持 chat、embedding 和 extra LLM feature
+- Agent Config：系统提示词、模型参数、thinking、temperature、embedding、工具审批和 feature provider 选择
+- Memory：Profile Memory、上下文预览、Dreaming insight 查看、应用、拒绝
+- Knowledge：文档写入、切片、关键词/向量检索结果
+- Market：能力市场、安装、启用、Agent 绑定、System Prompt Template 创建、预览、fork
+- Tools：工具审批请求和处理
+- Tasks：普通任务、心跳任务、立即运行和运行记录
+- Channels：NapCat / OneBot 连接、endpoint、监听策略、inbox、outbox、审批和发送状态
+- Workspace：启用 workspace、隔离策略、文件列表、文件读写、受限命令和命令历史
+- Logs：开发占位页，后续可扩展为运行日志和审计中心
 
-设计边界：
+Web Chat 和 Channel Adapter 是两个入口：Web Chat 由用户在当前会话主动输入触发 Agent Loop；Channel Adapter 由外部消息监听触发，每个连接默认绑定一个专用监听/主控会话。
 
-- Web Chat 和 Channel Adapter 不共用同一个“新建对话”入口。
-- Web Chat 由用户输入 query 主动触发 Agent Loop。
-- Channel Adapter 由外部消息监听触发 Agent Loop，每个连接默认有一个专用监听/主控会话。
-- 当前 MVP 只把 NapCat / OneBot 作为可验证入口；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项。
-- NapCat 连接的 URL 类配置统一保存为 endpoint：`message_api`、`event_stream`、`webhook_callback`。本机调试时 webhook URL 建议使用 `?token=` 形式，详细说明见 [../backend/NAPCAT.md](../backend/NAPCAT.md)。
-
-本地运行：
+## 本地运行
 
 ```bash
 npm install
 npm run dev
 ```
 
-构建检查：
+默认连接本地后端：
+
+```text
+http://localhost:8080
+```
+
+后端地址可通过 Vite 环境变量覆盖：
+
+```bash
+VITE_API_BASE_URL=http://localhost:8080 npm run dev
+```
+
+## 构建检查
 
 ```bash
 npm run build
 ```
+
+本轮已验证 `npm run build` 通过。当前构建有 Vite chunk size warning，不影响运行；后续可以用路由级懒加载继续优化包体积。
+
+## Step F10 验收清单
+
+- 登录 / 注册：可以进入应用壳，退出后回到登录页。
+- Provider：可以新增、编辑、删除用户级模型供应商。
+- Agent Config：可以保存模型、temperature、thinking、embedding、工具审批和 feature provider 配置。
+- Chat：可以创建会话、发送消息、看到回复和错误提示。
+- Memory：可以新增 Profile Memory、搜索上下文、处理 Dreaming insight。
+- Knowledge：可以写入文档并检索 chunk。
+- Task：可以创建任务、心跳任务、立即运行并查看运行记录。
+- Workspace：可以启用 workspace、读写文件、列目录、执行白名单命令。
+- Channels：可以配置 NapCat / OneBot endpoint、策略、inbox、outbox 和显式发送。
+- 移动端：窄屏下通过顶部菜单打开侧边导航，主要表单和列表不遮挡。
+- i18n：顶部语言开关可以在中文和英文之间切换。
+
+## NapCat
+
+NapCat 连接的 URL 类配置统一保存为 endpoint：`message_api`、`event_stream`、`webhook_callback`。部署和调试说明见 [../backend/NAPCAT.md](../backend/NAPCAT.md)。

@@ -44,7 +44,7 @@ FreeDinnerAgent/
   README.md
 ```
 
-## 核心功能规划
+## 核心功能
 
 1. 用户与会话
    - 支持用户名、密码登录
@@ -93,14 +93,14 @@ FreeDinnerAgent/
 
 ## 部署与运行要求
 
-本项目计划使用以下环境运行：
+本项目使用以下环境运行：
 
 - Node.js 20+
 - npm 10+ 或 pnpm 9+
 - Go 1.26+
 - PostgreSQL 17+ 推荐，macOS Homebrew 环境下 pgvector 默认适配 PostgreSQL 17/18
 - pgvector，用于 Semantic Memory / RAG 向量检索
-- 用户自备 OpenAI / OpenAI-compatible API Key；Anthropic 配置可保存但当前聊天生成尚未接入
+- 用户自备 OpenAI / OpenAI-compatible API Key；Anthropic 配置可保存，原生 Anthropic 调用归入高级项
 
 后端需要配置环境变量：
 
@@ -121,7 +121,7 @@ OpenAI / OpenAI-compatible 网关的 API Key 不作为全局环境变量配置�
 
 ## 本地运行方式
 
-当前仓库已完成后端主体实现、React 前端 MVP 和数据库初始化脚本。按以下步骤可以运行本地开发环境：
+当前仓库已完成 Go 后端主体、React 前端控制台、PostgreSQL schema 和数据库初始化脚本。按以下步骤可以运行本地开发环境：
 
 1. 安装 PostgreSQL 与 pgvector
 
@@ -184,12 +184,14 @@ http://localhost:5173
 
 ## 测试与质量门禁
 
-后端结构化重构后，建议每次收口前至少执行：
+建议每次收口前至少执行：
 
 ```bash
 git diff --check
 cd backend
 go test ./...
+cd ../frontend
+npm run build
 ```
 
 当前后端核心依赖方向保持为：
@@ -199,6 +201,8 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 ```
 
 `internal/api` 只负责 HTTP 入参、鉴权用户、调用 service 和返回统一响应；`internal/store` 只负责数据库访问；Agent Loop、Memory、Tool、Channel、Scheduler、Workspace 等业务规则分别留在对应 domain service 包中。
+
+本轮前端整理已通过 `npm run build`，后端测试已通过 `go test ./...`。本地 smoke 覆盖过注册、provider、agent config、chat 错误兜底、memory、knowledge、task、channel 和 workspace API 链路。
 
 ## 设计文档
 
@@ -215,7 +219,7 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 
 ## 当前阶段
 
-当前版本已完成总体目录、数据库 schema、Go 后端主体和设计文档。后端已经具备以下可运行能力：
+当前版本已完成总体目录、数据库 schema、Go 后端主体、React 前端控制台和设计文档。系统已经具备以下可运行能力：
 
 - 用户注册、用户名密码登录、JWT 鉴权和当前用户接口
 - 用户级模型供应商配置，API Key 加密保存；聊天生成当前支持 OpenAI / OpenAI-compatible provider，Anthropic provider 先作为配置预留
@@ -229,8 +233,9 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 - 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork 和规则安全扫描
 - NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环
 - Workspace 本地目录 MVP：启用、状态、文件读写、目录列表、受限 CLI 执行和审计日志
+- React 前端控制台：登录/注册、Web Chat、Providers、Agent Config、Memory、Knowledge、Market、Tools、Tasks、Channels、Workspace 页面已经接入真实 API；支持中文/英文切换、统一 loading/empty/error/toast 基础组件、统一表单 Field 组件和移动端侧边导航抽屉
 
-当前主要未完成的是前端全量页面细化和生产部署脚本。高级项包括多平台具体 Adapter、生产级 sandbox 强隔离、MCP stdio 进程生命周期、多模型 Shadow Validator、真实附件下载/发送和 LLM/embedding Curator。
+当前主要未完成的是生产部署脚本和更细的体验打磨。高级项包括多平台具体 Adapter、生产级 sandbox 强隔离、MCP stdio 进程生命周期、多模型 Shadow Validator、真实附件下载/发送和 LLM/embedding Curator。
 
 ## NapCat 本机调试
 

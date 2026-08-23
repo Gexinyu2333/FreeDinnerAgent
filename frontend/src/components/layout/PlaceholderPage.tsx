@@ -28,7 +28,7 @@ export function PlaceholderPage({ pageKey }: PlaceholderPageProps) {
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Badge tone="blue">{t("common.stepF1")}</Badge>
+          <Badge tone="blue">{t("common.placeholder")}</Badge>
           <h1 className="mt-3 text-2xl font-semibold tracking-normal text-ink-900">
             {t(`pages.${pageKey}.title`)}
           </h1>

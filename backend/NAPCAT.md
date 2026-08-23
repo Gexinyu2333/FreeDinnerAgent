@@ -161,14 +161,3 @@ ORDER BY created_at DESC
 LIMIT 5;
 "
 ```
-
-## 已有数据库迁移
-
-新数据库直接执行 `database/init.sql` 即可，已经包含 `channel_connection_endpoints`。
-
-如果本地数据库是在 endpoint 表加入之前初始化的，可以执行：
-
-```bash
-/opt/homebrew/opt/postgresql@17/bin/psql -U freedinner -d freedinner_agent -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS channel_connection_endpoints (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, channel_connection_id UUID NOT NULL REFERENCES channel_connections(id) ON DELETE CASCADE, endpoint_type VARCHAR(80) NOT NULL, display_name VARCHAR(160) NOT NULL, direction VARCHAR(32) NOT NULL CHECK (direction IN ('inbound', 'outbound', 'bidirectional')), transport VARCHAR(40) NOT NULL CHECK (transport IN ('http', 'http_sse', 'websocket', 'grpc', 'custom')), url TEXT NOT NULL, encrypted_config JSONB NOT NULL DEFAULT '{}'::jsonb, status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'revoked', 'deleted')), metadata JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (channel_connection_id, endpoint_type)); CREATE INDEX IF NOT EXISTS idx_channel_connection_endpoints_connection_status ON channel_connection_endpoints(channel_connection_id, status); CREATE INDEX IF NOT EXISTS idx_channel_connection_endpoints_type_status ON channel_connection_endpoints(endpoint_type, status); ALTER TABLE channel_connections DROP COLUMN IF EXISTS adapter_endpoint_url, DROP COLUMN IF EXISTS adapter_sse_url, DROP COLUMN IF EXISTS webhook_callback_url;"
-```
-
