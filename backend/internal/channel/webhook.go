@@ -153,7 +153,7 @@ func (s *Service) HandleWebhook(ctx context.Context, connectionID, providedSecre
 func (s *Service) ensureConversationAndMessage(ctx context.Context, connection store.ChannelConnection, event normalizedEvent) (store.ExternalConversation, store.Conversation, store.Message, error) {
 	external, err := s.channels.FindExternalConversation(ctx, connection.ID, event.ExternalConversationID)
 	if err == nil {
-		msg, err := s.conversations.CreateUserMessage(ctx, connection.UserID, external.ConversationID, event.Text)
+		msg, err := s.conversations.CreateUserMessageWithMetadata(ctx, connection.UserID, external.ConversationID, channelMessageContent(event), channelMessageMetadata(connection, event))
 		if err != nil {
 			return store.ExternalConversation{}, store.Conversation{}, store.Message{}, err
 		}
@@ -164,11 +164,7 @@ func (s *Service) ensureConversationAndMessage(ctx context.Context, connection s
 		return store.ExternalConversation{}, store.Conversation{}, store.Message{}, err
 	}
 
-	title := "QQ " + event.ExternalConversationID
-	if event.ExternalTitle != nil && *event.ExternalTitle != "" {
-		title = "QQ " + *event.ExternalTitle
-	}
-	conversation, err := s.conversations.CreateWithChannel(ctx, connection.UserID, title, "qq")
+	conversation, err := s.conversations.CreateWithSource(ctx, channelConversationCreate(connection, event))
 	if err != nil {
 		return store.ExternalConversation{}, store.Conversation{}, store.Message{}, err
 	}
@@ -177,6 +173,60 @@ func (s *Service) ensureConversationAndMessage(ctx context.Context, connection s
 	if err != nil {
 		return store.ExternalConversation{}, store.Conversation{}, store.Message{}, err
 	}
-	message, err := s.conversations.CreateUserMessage(ctx, connection.UserID, conversation.ID, event.Text)
+	message, err := s.conversations.CreateUserMessageWithMetadata(ctx, connection.UserID, conversation.ID, channelMessageContent(event), channelMessageMetadata(connection, event))
 	return external, conversation, message, err
+}
+
+func channelConversationCreate(connection store.ChannelConnection, event normalizedEvent) store.ConversationCreate {
+	title := "Channel " + event.ExternalConversationID
+	if event.ExternalTitle != nil && *event.ExternalTitle != "" {
+		title = *event.ExternalTitle
+	}
+	return store.ConversationCreate{
+		UserID:                   connection.UserID,
+		Title:                    title,
+		Channel:                  "channel",
+		Source:                   "channel",
+		ChannelConnectionID:      &connection.ID,
+		ExternalConversationID:   &event.ExternalConversationID,
+		ExternalConversationType: &event.ExternalConversationType,
+		ExternalScopeID:          event.ExternalScopeID,
+		ExternalTitle:            event.ExternalTitle,
+	}
+}
+
+func channelMessageContent(event normalizedEvent) string {
+	identity := "未知发言人"
+	if event.ExternalSenderName != nil && strings.TrimSpace(*event.ExternalSenderName) != "" {
+		identity = strings.TrimSpace(*event.ExternalSenderName)
+	}
+	if event.ExternalSenderID != nil && strings.TrimSpace(*event.ExternalSenderID) != "" {
+		identity += "(" + strings.TrimSpace(*event.ExternalSenderID) + ")"
+	}
+	scope := "QQ 私聊"
+	if event.ExternalConversationType == "group_chat" {
+		scope = "QQ 群聊"
+	}
+	if event.ExternalTitle != nil && strings.TrimSpace(*event.ExternalTitle) != "" {
+		scope += " " + strings.TrimSpace(*event.ExternalTitle)
+	}
+	return "[" + scope + " / 发言人 " + identity + "] " + strings.TrimSpace(event.Text)
+}
+
+func channelMessageMetadata(connection store.ChannelConnection, event normalizedEvent) json.RawMessage {
+	metadata, _ := json.Marshal(map[string]any{
+		"source":                      "channel_adapter",
+		"channel":                     "qq",
+		"channel_connection_id":       connection.ID,
+		"external_conversation_id":    event.ExternalConversationID,
+		"external_conversation_type":  event.ExternalConversationType,
+		"external_conversation_title": event.ExternalTitle,
+		"external_sender_id":          event.ExternalSenderID,
+		"external_sender_name":        event.ExternalSenderName,
+		"external_event_id":           event.ExternalEventID,
+		"external_scope_id":           event.ExternalScopeID,
+		"external_scope_type":         event.ScopeType,
+		"original_text":               event.Text,
+	})
+	return metadata
 }

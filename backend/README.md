@@ -304,8 +304,11 @@ Channel Adapter 和普通 Web Chat 的触发方式不同：
 
 - Web Chat 是用户主动对话，用户在某个 conversation 里发送 query 才触发 Agent Loop。
 - Channel Adapter 是监听入口，外部 QQ 私聊、群聊 @ 或关键字命中后，由 webhook 事件触发 Agent Loop。
-- 前端建议单独做 Channels 页面管理连接、策略、inbox、outbox 和审批；不要把 Channel connection 当成普通“新建对话”入口。
-- 每个 `channel_connection` 默认对应一个专用监听/主控会话；外部私聊、群聊等 scope 通过 `external_conversations` 映射到本地 conversation，并在 UI 上归属该 Channel connection。
+- 前端单独做 Channels 页面管理连接、策略、inbox、outbox、审批和外部会话 transcript；不要把 Channel connection 当成普通“新建对话”入口。
+- Channel provider 可通过 `metadata.form` 定义前端连接表单、endpoint 模板、secret 字段和 config 映射，避免在核心模型或前端表单里写死 NapCatQQ 专属字段。
+- `conversations.source` 区分 `web_chat`、`channel` 和 `scheduled_job`。`GET /api/v1/conversations` 只返回 Web Chat 会话；`POST /api/v1/conversations/{id}/messages` 会拒绝 `source = channel` 的会话并返回 `CHANNEL_CONVERSATION_READONLY_IN_WEB`。
+- 外部私聊、群聊等 scope 通过 `external_conversations` 映射到本地 conversation，并在 UI 上归属该 Channel connection；只读 transcript 使用 `GET /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/messages`。
+- 人工从 Web 接管外部会话时，使用 `POST /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/outbox-drafts` 创建外发草稿，不走普通 Web Chat send。
 - 微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留抽象；当前可运行验证入口是 NapCat / OneBot。
 - approved outbox 可以通过显式接口发送，也可以由后台 sender worker 自动发送。
 

@@ -19,6 +19,7 @@ import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime } from "../../../lib/format";
 import {
@@ -79,6 +80,7 @@ const weekdayValues = [1, 2, 3, 4, 5, 6, 7];
 
 export function TasksPage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const templatesQuery = useScheduledJobTemplates();
   const [statusFilter, setStatusFilter] = useState("");
@@ -165,6 +167,7 @@ export function TasksPage() {
       onSuccess: (job) => {
         refresh(job.id);
         setForm(initialForm);
+        toast.notify(t("tasks.created"));
       }
     });
   }
@@ -186,14 +189,6 @@ export function TasksPage() {
           tone="error"
         />
       )}
-      {createMutation.isSuccess && <Toast message={t("tasks.created")} tone="success" />}
-      {runNowMutation.data && (
-        <Toast
-          message={t("tasks.runNowQueued", { status: runNowMutation.data.run.status })}
-          tone="success"
-        />
-      )}
-
       <div className="grid gap-5 xl:grid-cols-[430px_minmax(0,1fr)]">
         <div className="space-y-4">
           <TemplatePanel
@@ -243,17 +238,26 @@ export function TasksPage() {
                       return;
                     }
                     deleteMutation.mutate(job.id, {
-                      onSuccess: () => refresh()
+                      onSuccess: () => {
+                        refresh();
+                        toast.notify(t("common.deleted"));
+                      }
                     });
                   }}
                   onPause={() =>
                     pauseMutation.mutate(job.id, {
-                      onSuccess: () => refresh(job.id)
+                      onSuccess: () => {
+                        refresh(job.id);
+                        toast.notify(t("tasks.status.paused"));
+                      }
                     })
                   }
                   onResume={() =>
                     resumeMutation.mutate(job.id, {
-                      onSuccess: () => refresh(job.id)
+                      onSuccess: () => {
+                        refresh(job.id);
+                        toast.notify(t("tasks.status.active"));
+                      }
                     })
                   }
                   onRunNow={() =>
@@ -261,6 +265,7 @@ export function TasksPage() {
                       onSuccess: (result) => {
                         refresh(job.id);
                         setSelectedRunID(result.run.id);
+                        toast.notify(t("tasks.runNowQueued", { status: result.run.status }));
                       }
                     })
                   }

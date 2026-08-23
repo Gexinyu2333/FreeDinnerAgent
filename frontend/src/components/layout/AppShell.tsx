@@ -16,9 +16,9 @@ export function AppShell() {
     <div className="min-h-screen bg-ink-50 text-ink-900">
       <Sidebar />
       <MobileSidebar onClose={() => setMobileMenuOpen(false)} open={mobileMenuOpen} />
-      <div className="min-h-screen lg:pl-64">
+      <div className="min-h-screen min-w-0 lg:pl-64">
         <TopBar onOpenMenu={() => setMobileMenuOpen(true)} />
-        <main className="px-4 py-5 sm:px-6 lg:px-8">
+        <main className="min-w-0 overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
           <Outlet />
         </main>
       </div>

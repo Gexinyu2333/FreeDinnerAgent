@@ -13,6 +13,7 @@ import { Select } from "../../../components/ui/Select";
 import { Tabs } from "../../../components/ui/Tabs";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime } from "../../../lib/format";
 import {
@@ -72,6 +73,7 @@ export function MemoryPage() {
 
 function ProfileMemoryPanel() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const typesQuery = useMemoryTypes();
   const [typeFilter, setTypeFilter] = useState("");
@@ -101,6 +103,7 @@ function ProfileMemoryPanel() {
         onSuccess: () => {
           setForm({ ...initialForm, memory_type: form.memory_type });
           void queryClient.invalidateQueries({ queryKey: profileMemoriesQueryKey });
+          toast.notify(t("memory.profile.created"));
         }
       }
     );
@@ -130,10 +133,6 @@ function ProfileMemoryPanel() {
             tone="error"
           />
         )}
-        {createMutation.isSuccess && (
-          <Toast message={t("memory.profile.created")} tone="success" />
-        )}
-
         <form className="flex flex-col gap-3 rounded-lg border border-ink-200 bg-white p-4 sm:flex-row" onSubmit={handleSearch}>
           <Input
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -141,6 +140,7 @@ function ProfileMemoryPanel() {
             value={searchQuery}
           />
           <Button
+            className="shrink-0"
             disabled={searchMutation.isPending}
             icon={<Search className="h-4 w-4" />}
             type="submit"
@@ -429,6 +429,7 @@ function MemoryChunkCard({ chunk }: { chunk: MemoryChunk }) {
 
 function DreamingInsightsPanel() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("pending");
   const insightsQuery = useDreamingInsights(status || undefined);
@@ -439,6 +440,24 @@ function DreamingInsightsPanel() {
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: dreamingInsightsQueryKey });
     void queryClient.invalidateQueries({ queryKey: profileMemoriesQueryKey });
+  }
+
+  function handleApply(insightID: string) {
+    applyMutation.mutate(insightID, {
+      onSuccess: () => {
+        refresh();
+        toast.notify(t("common.approved"));
+      }
+    });
+  }
+
+  function handleReject(insightID: string) {
+    rejectMutation.mutate(insightID, {
+      onSuccess: () => {
+        refresh();
+        toast.notify(t("common.rejected"));
+      }
+    });
   }
 
   const mutationError = applyMutation.error ?? rejectMutation.error ?? null;
@@ -497,22 +516,14 @@ function DreamingInsightsPanel() {
                   <Button
                     disabled={applyMutation.isPending}
                     icon={<Check className="h-4 w-4" />}
-                    onClick={() =>
-                      applyMutation.mutate(insight.id, {
-                        onSuccess: refresh
-                      })
-                    }
+                    onClick={() => handleApply(insight.id)}
                   >
                     {t("memory.dreaming.apply")}
                   </Button>
                   <Button
                     disabled={rejectMutation.isPending}
                     icon={<X className="h-4 w-4" />}
-                    onClick={() =>
-                      rejectMutation.mutate(insight.id, {
-                        onSuccess: refresh
-                      })
-                    }
+                    onClick={() => handleReject(insight.id)}
                     variant="secondary"
                   >
                     {t("memory.dreaming.reject")}

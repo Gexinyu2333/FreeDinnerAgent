@@ -12,6 +12,7 @@ type oneBotEvent struct {
 	PostType    string          `json:"post_type"`
 	MessageType string          `json:"message_type"`
 	MessageID   any             `json:"message_id"`
+	SelfID      any             `json:"self_id"`
 	UserID      any             `json:"user_id"`
 	GroupID     any             `json:"group_id"`
 	RawMessage  string          `json:"raw_message"`
@@ -33,6 +34,7 @@ func normalizeOneBot(rawPayload []byte, botQQ *string) (normalizedEvent, error) 
 		return normalizedEvent{EventType: "system", ExternalEventID: eventID, Text: raw.PostType, RawPayload: payload}, nil
 	}
 
+	botID := botAccountID(raw, botQQ)
 	text := strings.TrimSpace(raw.RawMessage)
 	if text == "" {
 		text = strings.TrimSpace(string(raw.Message))
@@ -58,7 +60,7 @@ func normalizeOneBot(rawPayload []byte, botQQ *string) (normalizedEvent, error) 
 			ExternalTitle:            &title,
 			ExternalSenderID:         senderIDPtr,
 			ExternalSenderName:       senderNamePtr,
-			Text:                     stripBotMention(text, botQQ),
+			Text:                     stripBotMention(text, botID),
 			ScopeType:                "group_chat",
 			ExternalScopeID:          &groupID,
 			RawPayload:               payload,
@@ -85,8 +87,11 @@ func summarizeOneBotMessage(text string) string {
 	replacements := map[string]string{
 		"[CQ:image":  "[图片附件]",
 		"[CQ:file":   "[文件附件]",
+		"[CQ:json":   "[卡片消息]",
 		"[CQ:record": "[语音附件]",
+		"[CQ:share":  "[分享消息]",
 		"[CQ:video":  "[视频附件]",
+		"[CQ:xml":    "[卡片消息]",
 	}
 	summary := text
 	for marker, label := range replacements {
@@ -147,6 +152,14 @@ func stringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func botAccountID(raw oneBotEvent, configured *string) *string {
+	if configured != nil && strings.TrimSpace(*configured) != "" {
+		value := strings.TrimSpace(*configured)
+		return &value
+	}
+	return stringPtrOrNil(valueToString(raw.SelfID))
 }
 
 func stripBotMention(text string, botQQ *string) string {

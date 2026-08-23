@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -12,8 +13,8 @@ import (
 )
 
 type ConversationHandler struct {
-	conversations *store.ConversationStore
-	llm           *llm.Service
+	conversations conversationStore
+	llm           conversationLLM
 }
 
 func NewConversationHandler(conversations *store.ConversationStore, llmService *llm.Service) *ConversationHandler {
@@ -21,6 +22,16 @@ func NewConversationHandler(conversations *store.ConversationStore, llmService *
 		conversations: conversations,
 		llm:           llmService,
 	}
+}
+
+type conversationStore interface {
+	Create(ctx context.Context, userID, title string) (store.Conversation, error)
+	ListWeb(ctx context.Context, userID string) ([]store.Conversation, error)
+	ListMessages(ctx context.Context, userID, conversationID string) ([]store.Message, error)
+}
+
+type conversationLLM interface {
+	SendMessage(ctx context.Context, userID, conversationID, content string) (store.SendMessageResult, error)
 }
 
 type createConversationRequest struct {
@@ -77,7 +88,7 @@ func (h *ConversationHandler) List(c *gin.Context) {
 		return
 	}
 
-	conversations, err := h.conversations.List(c.Request.Context(), userID)
+	conversations, err := h.conversations.ListWeb(c.Request.Context(), userID)
 	if err != nil {
 		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list conversations")
 		return
@@ -130,6 +141,9 @@ func (h *ConversationHandler) SendMessage(c *gin.Context) {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			Error(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			return
+		case errors.Is(err, store.ErrConversationReadonlyInWeb):
+			Error(c, http.StatusConflict, "CHANNEL_CONVERSATION_READONLY_IN_WEB", "外部 Channel 会话不能在 Web Chat 中直接发送，请到 Channels 页面通过 Outbox 处理")
 			return
 		case errors.Is(err, llm.ErrModelProviderRequired):
 			Error(c, http.StatusBadRequest, "MODEL_PROVIDER_REQUIRED", "请先在设置中配置 OpenAI 或 Anthropic API Key")

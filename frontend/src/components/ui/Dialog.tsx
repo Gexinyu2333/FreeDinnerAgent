@@ -18,7 +18,7 @@ export function Dialog({ open, title, children, onClose }: DialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4">
-      <section className="w-full max-w-lg rounded-lg bg-white shadow-soft">
+      <section className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-soft">
         <header className="flex items-center justify-between border-b border-ink-100 px-5 py-4">
           <h2 className="text-base font-semibold text-ink-900">{title}</h2>
           <button
@@ -30,7 +30,7 @@ export function Dialog({ open, title, children, onClose }: DialogProps) {
             <X className="h-4 w-4" />
           </button>
         </header>
-        <div className="px-5 py-4">{children}</div>
+        <div className="max-h-[calc(90vh-4rem)] overflow-auto px-5 py-4">{children}</div>
       </section>
     </div>
   );

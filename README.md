@@ -55,6 +55,7 @@ FreeDinnerAgent/
 
 2. AI 对话
    - Web Chat 是用户主动发起的对话，只有用户在当前会话输入 query 时才触发 Agent Loop
+   - Web Chat 列表只展示 `source = web_chat` 的会话；QQ / NapCat / 后续 WeChat、Discord、Telegram 等外部入口产生的 `source = channel` 会话只在 Channels 页面查看
    - 用户可配置自己的 OpenAI / OpenAI-compatible API Key；Anthropic provider 字段已预留，聊天调用层归入高级项
    - 后端按当前用户的默认 Agent 配置和模型供应商配置调用 LLM
    - 后端组装上下文、相关记忆和可用工具
@@ -79,7 +80,8 @@ FreeDinnerAgent/
    - 心跳任务：每日简报、每周回顾、跟进监控、定时提醒
    - 能力市场：MCP、Skills、Tools、Knowledge Base 支持私有/公共和安装到个人 Agent
    - 多渠道入口：先接入 NapCat / OneBot；Channel Adapter 作为独立监听入口，不混入普通 Web Chat 新建对话
-   - 每个 Channel connection 默认有一个专用监听/主控会话，用于展示 inbound/outbox、运行日志、审批和人工介入记录
+   - 每个 Channel connection 管理自己的连接配置、监听策略、Inbox、Outbox、Logs 和外部会话只读 transcript；人工发往外部平台时从 Channel Session 创建 Outbox 草稿，再走审批和发送链路
+   - Channel 连接表单按 provider metadata 渲染 endpoint、token、secret 和身份字段，NapCatQQ 只是首个内置 provider，后续 WeChat / Discord / Telegram / 飞书可通过新增 provider definition 与 adapter 扩展
    - 微信、Telegram、Discord、飞书等具体 Adapter 与生产级 sandbox 强隔离项一样，归入高级项
    - 通过 Tool Registry / MCP tool sync 继续扩展更多工具
 
@@ -231,7 +233,7 @@ cmd/server -> internal/app -> internal/api + domain services -> internal/store
 - 任务管理和心跳任务：每日简报、每周回顾、跟进监控模板，支持创建、查看、更新、暂停、恢复、删除、立即运行、运行记录和后台到期扫描 worker
 - Tool Registry / Tool Router / Tool Executor，内置任务、记忆、知识库和 Workspace CLI 工具；MCP metadata tool sync 和 HTTP MCP bridge `tools/call` 执行
 - 能力市场：Tool、Channel Adapter、MCP、Skill、Knowledge Base、System Prompt Template 类型，支持安装、评分、Agent 绑定、系统提示词模板创建/预览/fork 和规则安全扫描
-- NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环
+- NapCat / OneBot Channel Adapter：私聊、群聊 @/关键词触发，Channel 入口与普通 Web Chat 分离，人工外发草稿、outbox 审批、显式发送和后台 sender worker；已验证 QQ 群消息监听、Agent 回复和 `/send_msg` 出站闭环
 - Workspace 本地目录 MVP：启用、状态、文件读写、目录列表、受限 CLI 执行和审计日志
 - React 前端控制台：登录/注册、Web Chat、Providers、Agent Config、Memory、Knowledge、Market、Tools、Tasks、Channels、Workspace 页面已经接入真实 API；支持中文/英文切换、统一 loading/empty/error/toast 基础组件、统一表单 Field 组件和移动端侧边导航抽屉
 

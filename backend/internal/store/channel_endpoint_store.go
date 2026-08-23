@@ -61,6 +61,27 @@ func (s *ChannelStore) ListEndpoints(ctx context.Context, userID, connectionID s
 	return endpoints, rows.Err()
 }
 
+func (s *ChannelStore) DeleteEndpointsExcept(ctx context.Context, userID, connectionID string, activeTypes []string) error {
+	if _, err := s.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
+		return err
+	}
+	if len(activeTypes) == 0 {
+		_, err := s.db.Exec(ctx, `
+			UPDATE channel_connection_endpoints
+			SET status = 'deleted', updated_at = NOW()
+			WHERE user_id = $1 AND channel_connection_id = $2 AND status <> 'deleted'
+		`, userID, connectionID)
+		return err
+	}
+	_, err := s.db.Exec(ctx, `
+		UPDATE channel_connection_endpoints
+		SET status = 'deleted', updated_at = NOW()
+		WHERE user_id = $1 AND channel_connection_id = $2 AND status <> 'deleted'
+			AND NOT (endpoint_type = ANY($3))
+	`, userID, connectionID, activeTypes)
+	return err
+}
+
 func (s *ChannelStore) FindEndpointByType(ctx context.Context, userID, connectionID, endpointType string) (ChannelConnectionEndpoint, error) {
 	return scanChannelConnectionEndpoint(s.db.QueryRow(ctx, `
 		SELECT id, user_id, channel_connection_id, endpoint_type, display_name, direction,

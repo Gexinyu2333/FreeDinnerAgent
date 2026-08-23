@@ -37,6 +37,16 @@ type CreateConnectionInput struct {
 	Config              json.RawMessage
 }
 
+type UpdateConnectionInput struct {
+	UserID              string
+	ConnectionID        string
+	DisplayName         string
+	ExternalAccountID   *string
+	ExternalAccountName *string
+	Endpoints           []EndpointInput
+	Config              json.RawMessage
+}
+
 type EndpointInput struct {
 	EndpointType string
 	DisplayName  string
@@ -167,6 +177,39 @@ func (s *Service) CreateConnection(ctx context.Context, input CreateConnectionIn
 	return connection, nil
 }
 
+func (s *Service) UpdateConnection(ctx context.Context, input UpdateConnectionInput) (store.ChannelConnection, error) {
+	if _, err := s.channels.FindUserConnectionByID(ctx, input.UserID, input.ConnectionID); err != nil {
+		return store.ChannelConnection{}, err
+	}
+	cfg := normalizeConnectionConfig(input.Config)
+	if input.ExternalAccountID == nil && strings.TrimSpace(cfg.BotQQ) != "" {
+		input.ExternalAccountID = &cfg.BotQQ
+	}
+	normalizedConfig, err := json.Marshal(cfg)
+	if err != nil {
+		return store.ChannelConnection{}, err
+	}
+	encryptedConfig, err := s.encryptConfig(normalizedConfig)
+	if err != nil {
+		return store.ChannelConnection{}, err
+	}
+	connection, err := s.channels.UpdateConnection(ctx, store.ChannelConnectionUpdate{
+		UserID:              input.UserID,
+		ConnectionID:        input.ConnectionID,
+		DisplayName:         strings.TrimSpace(input.DisplayName),
+		ExternalAccountID:   trimOptional(input.ExternalAccountID),
+		ExternalAccountName: trimOptional(input.ExternalAccountName),
+		EncryptedConfig:     encryptedConfig,
+	})
+	if err != nil {
+		return store.ChannelConnection{}, err
+	}
+	if err := s.replaceConnectionEndpoints(ctx, input.UserID, input.ConnectionID, input.Endpoints); err != nil {
+		return store.ChannelConnection{}, err
+	}
+	return connection, nil
+}
+
 func normalizeConnectionConfig(raw json.RawMessage) connectionConfig {
 	if len(raw) == 0 {
 		return connectionConfig{}
@@ -220,6 +263,20 @@ func (s *Service) createConnectionEndpoints(ctx context.Context, userID, connect
 	return nil
 }
 
+func (s *Service) replaceConnectionEndpoints(ctx context.Context, userID, connectionID string, endpoints []EndpointInput) error {
+	activeTypes := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		endpointType := strings.TrimSpace(endpoint.EndpointType)
+		if endpointType != "" && strings.TrimSpace(endpoint.URL) != "" {
+			activeTypes = append(activeTypes, endpointType)
+		}
+	}
+	if err := s.channels.DeleteEndpointsExcept(ctx, userID, connectionID, activeTypes); err != nil {
+		return err
+	}
+	return s.createConnectionEndpoints(ctx, userID, connectionID, endpoints)
+}
+
 func (s *Service) encryptOptionalConfig(raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "{}" {
 		return json.RawMessage(`{}`), nil
@@ -237,6 +294,13 @@ func defaultString(value, fallback string) string {
 
 func (s *Service) ListConnections(ctx context.Context, userID string) ([]store.ChannelConnection, error) {
 	return s.channels.ListConnections(ctx, userID)
+}
+
+func (s *Service) DeleteConnection(ctx context.Context, userID, connectionID string) error {
+	if _, err := s.channels.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
+		return err
+	}
+	return s.channels.DeleteConnection(ctx, userID, connectionID)
 }
 
 func (s *Service) ListEndpoints(ctx context.Context, userID, connectionID string) ([]store.ChannelConnectionEndpoint, error) {
@@ -264,6 +328,13 @@ func (s *Service) UpsertPolicy(ctx context.Context, input UpsertPolicyInput) (st
 		RateLimitPerMinute:         input.RateLimitPerMinute,
 		Metadata:                   rateLimitMetadata(input.RateLimitPolicy),
 	})
+}
+
+func (s *Service) DeletePolicy(ctx context.Context, userID, connectionID, policyID string) error {
+	if _, err := s.channels.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
+		return err
+	}
+	return s.channels.DeletePolicy(ctx, userID, connectionID, policyID)
 }
 
 func (s *Service) adapterForConnection(ctx context.Context, connection store.ChannelConnection) ChannelAdapter {

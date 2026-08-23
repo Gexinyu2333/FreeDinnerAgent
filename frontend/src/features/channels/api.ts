@@ -1,13 +1,16 @@
 import { apiClient } from "../../lib/apiClient";
+import type { Message } from "../chat/types";
 
 import type {
   ChannelInboxEvent,
   ChannelOutboxMessage,
   ChannelPolicy,
   ChannelProviderDefinition,
+  CreateChannelOutboxDraftInput,
   CreateChannelConnectionInput,
   ExternalConversation,
   PublicChannelConnection,
+  UpdateChannelConnectionInput,
   UpsertChannelPolicyInput
 } from "./types";
 
@@ -19,6 +22,20 @@ export function createChannelConnection(input: CreateChannelConnectionInput) {
   return apiClient<PublicChannelConnection>("/me/channel-connections", {
     method: "POST",
     body: input
+  });
+}
+
+export function updateChannelConnection(input: UpdateChannelConnectionInput) {
+  const { connection_id, ...body } = input;
+  return apiClient<PublicChannelConnection>(`/me/channel-connections/${connection_id}`, {
+    method: "PATCH",
+    body
+  });
+}
+
+export function deleteChannelConnection(connectionID: string) {
+  return apiClient<{ deleted: boolean }>(`/me/channel-connections/${connectionID}`, {
+    method: "DELETE"
   });
 }
 
@@ -38,9 +55,38 @@ export function upsertChannelPolicy(input: UpsertChannelPolicyInput) {
   });
 }
 
+export function deleteChannelPolicy(input: { connection_id: string; policy_id: string }) {
+  return apiClient<{ deleted: boolean }>(
+    `/me/channel-connections/${input.connection_id}/policies/${input.policy_id}`,
+    {
+      method: "DELETE"
+    }
+  );
+}
+
 export function listExternalConversations(connectionID: string) {
   return apiClient<ExternalConversation[]>(
     `/me/channel-connections/${connectionID}/external-conversations?limit=50`
+  );
+}
+
+export function listExternalConversationMessages(
+  connectionID: string,
+  externalConversationID: string
+) {
+  return apiClient<Message[]>(
+    `/me/channel-connections/${connectionID}/external-conversations/${externalConversationID}/messages`
+  );
+}
+
+export function createOutboxDraft(input: CreateChannelOutboxDraftInput) {
+  const { connection_id, external_conversation_id, ...body } = input;
+  return apiClient<ChannelOutboxMessage>(
+    `/me/channel-connections/${connection_id}/external-conversations/${external_conversation_id}/outbox-drafts`,
+    {
+      method: "POST",
+      body
+    }
   );
 }
 

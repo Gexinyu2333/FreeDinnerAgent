@@ -9,6 +9,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime } from "../../../lib/format";
 import {
@@ -22,6 +23,7 @@ import type { ToolApprovalRequest, ToolDefinition } from "../types";
 
 export function ToolsPage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const toolsQuery = useTools();
   const [approvalStatus, setApprovalStatus] = useState("pending");
@@ -105,10 +107,20 @@ export function ToolsPage() {
                   approval={approval}
                   key={approval.id}
                   onApprove={() =>
-                    approveMutation.mutate(approval.id, { onSuccess: refreshApprovals })
+                    approveMutation.mutate(approval.id, {
+                      onSuccess: () => {
+                        refreshApprovals();
+                        toast.notify(t("common.approved"));
+                      }
+                    })
                   }
                   onReject={() =>
-                    rejectMutation.mutate(approval.id, { onSuccess: refreshApprovals })
+                    rejectMutation.mutate(approval.id, {
+                      onSuccess: () => {
+                        refreshApprovals();
+                        toast.notify(t("common.rejected"));
+                      }
+                    })
                   }
                   resolving={approveMutation.isPending || rejectMutation.isPending}
                 />

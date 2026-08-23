@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../../components/ui/Button";
 import { Field } from "../../../components/ui/Field";
 import { Input } from "../../../components/ui/Input";
+import { SecretInput } from "../../../components/ui/SecretInput";
 import { Toast } from "../../../components/ui/Toast";
 import { setTokens } from "../../../lib/authToken";
 import { ApiError } from "../../../lib/errors";
@@ -56,13 +57,12 @@ export function LoginPage() {
         </Field>
 
         <Field label={t("auth.fields.password")}>
-          <Input
+          <SecretInput
             autoComplete="current-password"
             minLength={8}
             onChange={(event) => setPassword(event.target.value)}
             placeholder={t("auth.fields.passwordPlaceholder")}
             required
-            type="password"
             value={password}
           />
         </Field>

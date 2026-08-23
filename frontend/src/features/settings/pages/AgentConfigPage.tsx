@@ -11,6 +11,7 @@ import { Select } from "../../../components/ui/Select";
 import { Switch } from "../../../components/ui/Switch";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import {
   agentConfigQueryKey,
@@ -49,6 +50,7 @@ type AgentFormState = {
 
 export function AgentConfigPage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const configQuery = useAgentConfig();
   const providersQuery = useModelProviders();
@@ -105,6 +107,7 @@ export function AgentConfigPage() {
         onSuccess: (updated) => {
           queryClient.setQueryData(agentConfigQueryKey, updated);
           setForm(toForm(updated));
+          toast.notify(t("agent.saved"));
         }
       }
     );
@@ -135,8 +138,6 @@ export function AgentConfigPage() {
       </div>
 
       {errorMessage && <Toast message={errorMessage} tone="error" />}
-      {updateMutation.isSuccess && <Toast message={t("agent.saved")} tone="success" />}
-
       <Section title={t("agent.sections.basic")}>
         <Field label={t("agent.fields.name")}>
           <Input
@@ -289,10 +290,10 @@ export function AgentConfigPage() {
       </Section>
 
       <Section title={t("agent.sections.features")}>
-        <div className="space-y-3">
+        <div className="space-y-3 md:col-span-2">
           {form.llm_feature_settings.map((setting, index) => (
             <div
-              className="grid gap-3 rounded-md border border-ink-200 p-3 lg:grid-cols-[1.4fr_1fr_1fr_120px]"
+              className="grid gap-3 rounded-md border border-ink-200 p-3 xl:grid-cols-[220px_minmax(220px,1fr)_minmax(180px,0.8fr)_140px]"
               key={setting.feature_key}
             >
               <ToggleField
@@ -410,8 +411,8 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between rounded-md border border-ink-200 px-3 py-2">
-      <span className="text-sm font-medium text-ink-700">{label}</span>
+    <label className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-ink-200 px-3 py-2">
+      <span className="min-w-0 text-sm font-medium leading-5 text-ink-700">{label}</span>
       <Switch checked={checked} onClick={() => onChange(!checked)} />
     </label>
   );

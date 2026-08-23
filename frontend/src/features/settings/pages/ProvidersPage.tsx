@@ -9,9 +9,11 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Field } from "../../../components/ui/Field";
 import { Input } from "../../../components/ui/Input";
 import { LoadingState } from "../../../components/ui/LoadingState";
+import { SecretInput } from "../../../components/ui/SecretInput";
 import { Select } from "../../../components/ui/Select";
 import { Switch } from "../../../components/ui/Switch";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import {
   modelProvidersQueryKey,
@@ -48,6 +50,7 @@ const emptyForm: ProviderFormState = {
 
 export function ProvidersPage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const providersQuery = useModelProviders();
   const createMutation = useCreateModelProvider();
@@ -104,6 +107,7 @@ export function ProvidersPage() {
           onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: modelProvidersQueryKey });
             resetForm();
+            toast.notify(t("common.saved"));
           }
         }
       );
@@ -126,6 +130,7 @@ export function ProvidersPage() {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: modelProvidersQueryKey });
           resetForm();
+          toast.notify(t("common.created"));
         }
       }
     );
@@ -141,6 +146,7 @@ export function ProvidersPage() {
         if (editingID === provider.id) {
           resetForm();
         }
+        toast.notify(t("common.deleted"));
       }
     });
   }
@@ -192,7 +198,7 @@ export function ProvidersPage() {
                       {provider.provider} · {provider.default_chat_model}
                     </p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
                     {provider.is_default && <Badge tone="green">{t("providers.default")}</Badge>}
                     <Badge tone={provider.status === "active" ? "blue" : "amber"}>
                       {provider.status}
@@ -282,11 +288,10 @@ export function ProvidersPage() {
             />
           </Field>
           <Field label={t("providers.chatAPIKey")}>
-            <Input
+            <SecretInput
               onChange={(event) => setForm({ ...form, chat_api_key: event.target.value })}
               placeholder={editingProvider ? t("providers.keepExistingKey") : "sk-..."}
               required={!editingProvider}
-              type="password"
               value={form.chat_api_key}
             />
           </Field>
@@ -309,12 +314,11 @@ export function ProvidersPage() {
             />
           </Field>
           <Field label={t("providers.embeddingAPIKey")}>
-            <Input
+            <SecretInput
               onChange={(event) =>
                 setForm({ ...form, embedding_api_key: event.target.value })
               }
               placeholder={editingProvider ? t("providers.keepExistingKey") : "sk-..."}
-              type="password"
               value={form.embedding_api_key}
             />
           </Field>

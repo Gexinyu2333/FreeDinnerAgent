@@ -12,6 +12,7 @@ import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime } from "../../../lib/format";
 import {
@@ -40,6 +41,7 @@ const initialForm: KnowledgeFormState = {
 
 export function KnowledgePage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const documentsQuery = useKnowledgeDocuments();
   const ingestMutation = useIngestKnowledgeDocument();
@@ -61,9 +63,15 @@ export function KnowledgePage() {
         visibility: form.visibility
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setForm(initialForm);
           void queryClient.invalidateQueries({ queryKey: knowledgeDocumentsQueryKey });
+          toast.notify(
+            t("knowledge.ingest.created", {
+              chunks: result.chunks.length,
+              status: result.embedding_status
+            })
+          );
         }
       }
     );
@@ -98,16 +106,6 @@ export function KnowledgePage() {
             tone="error"
           />
         )}
-        {ingestMutation.data && (
-          <Toast
-            message={t("knowledge.ingest.created", {
-              chunks: ingestMutation.data.chunks.length,
-              status: ingestMutation.data.embedding_status
-            })}
-            tone="success"
-          />
-        )}
-
         <form className="flex flex-col gap-3 rounded-lg border border-ink-200 bg-white p-4 sm:flex-row" onSubmit={handleSearch}>
           <Input
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -115,6 +113,7 @@ export function KnowledgePage() {
             value={searchQuery}
           />
           <Button
+            className="shrink-0"
             disabled={searchMutation.isPending}
             icon={<Search className="h-4 w-4" />}
             type="submit"

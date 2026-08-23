@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	AppEnv                 string
+	ServerHost             string
 	ServerPort             string
 	DatabaseURL            string
 	JWTSecret              string
@@ -32,6 +33,7 @@ func Load() (Config, error) {
 
 	cfg := Config{
 		AppEnv:                 getEnv("APP_ENV", "development"),
+		ServerHost:             getEnv("SERVER_HOST", "127.0.0.1"),
 		ServerPort:             getEnv("SERVER_PORT", "8080"),
 		DatabaseURL:            os.Getenv("DATABASE_URL"),
 		JWTSecret:              os.Getenv("JWT_SECRET"),

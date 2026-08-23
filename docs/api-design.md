@@ -246,6 +246,8 @@ DELETE /api/v1/me/model-providers/{provider_id}
 
 ## 4. 会话接口
 
+本节 `/conversations` 接口只服务 Web Chat 主动对话。后端只返回 `source = web_chat` 的会话；外部 QQ、WeChat、Discord、Telegram、飞书等 Channel 监听会话归属于 Channels 页面和 Channel transcript 接口，不混入普通 Web Chat 列表。
+
 ### 创建会话
 
 ```http
@@ -267,6 +269,7 @@ POST /api/v1/conversations
   "data": {
     "id": "uuid",
     "title": "今天的计划",
+    "source": "web_chat",
     "created_at": "2026-08-20T13:00:00Z"
   },
   "error": null
@@ -327,6 +330,18 @@ GET /api/v1/conversations/{conversation_id}/compression-jobs/{job_id}
 
 ```http
 POST /api/v1/conversations/{conversation_id}/messages
+```
+
+该接口只能向 `source = web_chat` 的会话发送消息。如果目标会话来自外部 Channel，后端返回：
+
+```json
+{
+  "data": null,
+  "error": {
+    "code": "CHANNEL_CONVERSATION_READONLY_IN_WEB",
+    "message": "外部 Channel 会话不能在 Web Chat 中直接发送，请到 Channels 页面通过 Outbox 处理"
+  }
+}
 ```
 
 请求：
@@ -861,6 +876,13 @@ POST /api/v1/me/channel-connections
 
 URL 类字段写入通用的 `channel_connection_endpoints`，避免为 NapCat、微信、Discord、飞书等不同平台不断给主表加列。`config` 和 endpoint `config` 中的 token/secret 等敏感字段加密写入 `encrypted_config`。NapCat 的 HTTP SSE 服务器、HTTP 客户端配置方式见 `backend/NAPCAT.md`。
 
+前端 Channels 页面会优先读取 `channel_provider_definitions.metadata.form` 渲染连接配置：
+
+- `identity_fields`：外部账号、Bot 名称等普通身份字段。
+- `secret_fields`：token、secret 等带小眼睛的敏感输入。
+- `endpoint_fields`：`message_api`、`event_stream`、`webhook_callback`、`bot_gateway` 等 endpoint 模板。
+- `config_bindings`：把 identity/secret 字段映射到 connection-level config，例如 NapCat 的 `bot_qq`、`access_token`、`webhook_secret`。
+
 ### 获取我的渠道连接
 
 ```http
@@ -919,6 +941,34 @@ POST /api/v1/channels/{connection_id}/webhook
 ```http
 GET /api/v1/me/channel-connections/{connection_id}/external-conversations
 ```
+
+这些会话对应 `conversations.source = channel`，用于 Channels 页面展示外部群聊、私聊、频道或线程。它们默认只读，不显示 Web Chat 输入框。
+
+### 获取外部会话只读 Transcript
+
+```http
+GET /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/messages
+```
+
+该接口通过 `connection_id + external_conversation_id` 找到绑定的本地 conversation，只返回消息 transcript。前端应展示外部发言人身份、消息来源和附件摘要；原始 `raw_payload` 继续留在 inbox event 中用于 debug，不默认铺在 transcript 中。
+
+### 创建渠道外发草稿
+
+```http
+POST /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/outbox-drafts
+```
+
+请求：
+
+```json
+{
+  "content": "我来人工接管回复这条消息。",
+  "message_type": "text",
+  "requires_approval": true
+}
+```
+
+该接口用于从 Channels 页面人工接管某个外部会话。它不会调用 Web Chat send，也不会直接写入普通 Web Chat 输入流，而是创建 `channel_outbox_messages` 草稿；如果 `requires_approval` 为空，则按匹配的 Channel policy 决定是 `pending` 还是 `approved`。
 
 ### 获取渠道入站事件
 

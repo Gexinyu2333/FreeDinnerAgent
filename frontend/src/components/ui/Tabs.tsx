@@ -13,11 +13,11 @@ type TabsProps = {
 
 export function Tabs({ items, activeKey, onChange }: TabsProps) {
   return (
-    <div className="inline-flex rounded-md border border-ink-200 bg-white p-1">
+    <div className="flex max-w-full flex-wrap gap-1 rounded-md border border-ink-200 bg-white p-1">
       {items.map((item) => (
         <button
           className={[
-            "rounded px-3 py-1.5 text-sm font-medium transition",
+            "max-w-full rounded px-3 py-1.5 text-sm font-medium leading-5 transition",
             item.key === activeKey
               ? "bg-ink-900 text-white"
               : "text-ink-600 hover:bg-ink-100"

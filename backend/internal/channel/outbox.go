@@ -22,6 +22,20 @@ func (s *Service) ListExternalConversations(ctx context.Context, userID, connect
 	return s.channels.ListExternalConversations(ctx, userID, connectionID, limit)
 }
 
+func (s *Service) ListExternalConversationMessages(ctx context.Context, userID, connectionID, externalConversationID string) ([]store.Message, error) {
+	if _, err := s.channels.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
+		return nil, err
+	}
+	external, err := s.channels.FindExternalConversation(ctx, connectionID, externalConversationID)
+	if err != nil {
+		return nil, err
+	}
+	if external.UserID != userID {
+		return nil, store.ErrNotFound
+	}
+	return s.conversations.ListMessages(ctx, userID, external.ConversationID)
+}
+
 func (s *Service) ListInboxEvents(ctx context.Context, userID, connectionID string, limit int) ([]store.ChannelInboxEvent, error) {
 	if _, err := s.channels.FindUserConnectionByID(ctx, userID, connectionID); err != nil {
 		return nil, err
@@ -34,6 +48,65 @@ func (s *Service) ListOutboxMessages(ctx context.Context, userID, connectionID s
 		return nil, err
 	}
 	return s.channels.ListOutboxMessages(ctx, userID, connectionID, status, limit)
+}
+
+type CreateOutboxDraftInput struct {
+	UserID                 string
+	ConnectionID           string
+	ExternalConversationID string
+	Content                string
+	MessageType            string
+	RequiresApproval       *bool
+}
+
+func (s *Service) CreateOutboxDraft(ctx context.Context, input CreateOutboxDraftInput) (store.ChannelOutboxMessage, error) {
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return store.ChannelOutboxMessage{}, store.ErrInvalidInput
+	}
+	connection, err := s.channels.FindUserConnectionByID(ctx, input.UserID, input.ConnectionID)
+	if err != nil {
+		return store.ChannelOutboxMessage{}, err
+	}
+	external, err := s.channels.FindExternalConversation(ctx, input.ConnectionID, input.ExternalConversationID)
+	if err != nil {
+		return store.ChannelOutboxMessage{}, err
+	}
+	if external.UserID != input.UserID {
+		return store.ChannelOutboxMessage{}, store.ErrNotFound
+	}
+	messageType := strings.TrimSpace(input.MessageType)
+	if messageType == "" {
+		messageType = "text"
+	}
+
+	requiresApproval := true
+	if input.RequiresApproval != nil {
+		requiresApproval = *input.RequiresApproval
+	} else {
+		scopeID := external.ExternalConversationID
+		policy := s.resolvePolicy(ctx, connection, normalizedEvent{
+			ExternalConversationID:   external.ExternalConversationID,
+			ExternalConversationType: external.ExternalConversationType,
+			ExternalTitle:            external.ExternalTitle,
+			ScopeType:                external.ExternalConversationType,
+			ExternalScopeID:          &scopeID,
+		})
+		requiresApproval = policy.RequireApprovalForOutbound
+	}
+
+	adapter := s.adapterForConnection(ctx, connection)
+	return s.channels.CreateOutboxMessage(ctx, store.ChannelOutboxMessage{
+		UserID:                 input.UserID,
+		ChannelConnectionID:    input.ConnectionID,
+		ExternalConversationID: &external.ID,
+		ConversationID:         &external.ConversationID,
+		MessageType:            messageType,
+		Content:                content,
+		Payload:                buildOutboxPayload(adapter, connection, external, content),
+		RequiresApproval:       requiresApproval,
+		Status:                 outboxStatus(requiresApproval),
+	})
 }
 
 func (s *Service) ApproveOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error) {

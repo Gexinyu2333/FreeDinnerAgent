@@ -14,6 +14,7 @@ import { Switch } from "../../../components/ui/Switch";
 import { Tabs } from "../../../components/ui/Tabs";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime, formatNumber } from "../../../lib/format";
 import { useAgentConfig } from "../../settings/hooks";
@@ -85,6 +86,7 @@ export function MarketPage() {
 
 function MarketplaceBrowser() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [itemType, setItemType] = useState("");
   const [installedOnly, setInstalledOnly] = useState(false);
@@ -112,7 +114,6 @@ function MarketplaceBrowser() {
           tone="error"
         />
       )}
-      {bindMutation.isSuccess && <Toast message={t("market.bound")} tone="success" />}
       <div className="flex flex-col gap-3 rounded-lg border border-ink-200 bg-white p-4 sm:flex-row sm:items-center">
         <Select
           className="w-full sm:w-60"
@@ -159,12 +160,20 @@ function MarketplaceBrowser() {
                     load_mode: "auto",
                     priority: 0
                   },
-                  { onSuccess: refresh }
+                  {
+                    onSuccess: () => {
+                      refresh();
+                      toast.notify(t("market.bound"));
+                    }
+                  }
                 );
               }}
               onInstall={() =>
                 installMutation.mutate(item.id, {
-                  onSuccess: refresh
+                  onSuccess: () => {
+                    refresh();
+                    toast.notify(t("common.saved"));
+                  }
                 })
               }
               onToggleInstall={() => {
@@ -176,7 +185,12 @@ function MarketplaceBrowser() {
                     id: item.viewer_install.id,
                     enabled: !item.viewer_install.is_enabled
                   },
-                  { onSuccess: refresh }
+                  {
+                    onSuccess: () => {
+                      refresh();
+                      toast.notify(t("common.saved"));
+                    }
+                  }
                 );
               }}
               working={
@@ -257,6 +271,7 @@ function MarketplaceCard({
 
 function SystemPromptPanel() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const createMutation = useCreatePromptTemplate();
   const previewMutation = usePreviewPromptTemplate();
@@ -287,6 +302,7 @@ function SystemPromptPanel() {
         onSuccess: (result) => {
           setPreviewVersionID(result.version.id);
           void queryClient.invalidateQueries({ queryKey: marketplaceItemsQueryKey });
+          toast.notify(t("market.prompt.created"));
         }
       }
     );
@@ -312,19 +328,25 @@ function SystemPromptPanel() {
         onSuccess: (result) => {
           setPreviewVersionID(result.version.id);
           void queryClient.invalidateQueries({ queryKey: marketplaceItemsQueryKey });
+          toast.notify(t("common.created"));
         }
       }
     );
   }
 
   function handleBindVersion() {
-    bindMutation.mutate({
-      agent_config_id: agentConfigQuery.data?.id,
-      capability_type: "system_prompt_template",
-      capability_ref_id: previewVersionID.trim(),
-      load_mode: "auto",
-      priority: 100
-    });
+    bindMutation.mutate(
+      {
+        agent_config_id: agentConfigQuery.data?.id,
+        capability_type: "system_prompt_template",
+        capability_ref_id: previewVersionID.trim(),
+        load_mode: "auto",
+        priority: 100
+      },
+      {
+        onSuccess: () => toast.notify(t("market.bound"))
+      }
+    );
   }
 
   return (
@@ -340,10 +362,6 @@ function SystemPromptPanel() {
             tone="error"
           />
         )}
-        {createMutation.isSuccess && (
-          <Toast message={t("market.prompt.created")} tone="success" />
-        )}
-        {bindMutation.isSuccess && <Toast message={t("market.bound")} tone="success" />}
         <form className="rounded-lg border border-ink-200 bg-white p-5 shadow-sm" onSubmit={handleCreate}>
           <div className="flex items-center gap-2">
             <PackageCheck className="h-5 w-5 text-ocean-600" />

@@ -16,6 +16,36 @@ export type ChannelProviderDefinition = {
   updated_at: string;
 };
 
+export type ChannelProviderFormField = {
+  key: string;
+  label?: string;
+  placeholder?: string;
+  maps_to?: "external_account_id" | "external_account_name";
+};
+
+export type ChannelProviderEndpointField = {
+  endpoint_type: string;
+  label?: string;
+  description?: string;
+  direction?: string;
+  transport?: string;
+  default_url?: string;
+  secret_keys?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ChannelProviderConfigBinding = {
+  key: string;
+  source: string;
+};
+
+export type ChannelProviderFormMetadata = {
+  identity_fields?: ChannelProviderFormField[];
+  secret_fields?: ChannelProviderFormField[];
+  endpoint_fields?: ChannelProviderEndpointField[];
+  config_bindings?: ChannelProviderConfigBinding[];
+};
+
 export type PublicChannelConnection = {
   id: string;
   user_id: string;
@@ -131,6 +161,10 @@ export type CreateChannelConnectionInput = {
   config?: Record<string, unknown>;
 };
 
+export type UpdateChannelConnectionInput = CreateChannelConnectionInput & {
+  connection_id: string;
+};
+
 export type CreateChannelEndpointInput = {
   endpoint_type: string;
   display_name: string;
@@ -152,4 +186,12 @@ export type UpsertChannelPolicyInput = {
   require_approval_for_outbound?: boolean;
   rate_limit_per_minute?: number;
   rate_limit_policy?: Record<string, unknown>;
+};
+
+export type CreateChannelOutboxDraftInput = {
+  connection_id: string;
+  external_conversation_id: string;
+  content: string;
+  message_type?: string;
+  requires_approval?: boolean;
 };

@@ -13,13 +13,19 @@ import (
 )
 
 type Conversation struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Title     string    `json:"title"`
-	Channel   string    `json:"channel"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                       string    `json:"id"`
+	UserID                   string    `json:"user_id"`
+	Title                    string    `json:"title"`
+	Channel                  string    `json:"channel"`
+	Source                   string    `json:"source"`
+	ChannelConnectionID      *string   `json:"channel_connection_id"`
+	ExternalConversationID   *string   `json:"external_conversation_id"`
+	ExternalConversationType *string   `json:"external_conversation_type"`
+	ExternalScopeID          *string   `json:"external_scope_id"`
+	ExternalTitle            *string   `json:"external_title"`
+	Status                   string    `json:"status"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
 }
 
 type Message struct {
@@ -50,25 +56,74 @@ func NewConversationStore(db *pgxpool.Pool) *ConversationStore {
 }
 
 func (s *ConversationStore) Create(ctx context.Context, userID, title string) (Conversation, error) {
-	return s.CreateWithChannel(ctx, userID, title, "web")
+	return s.CreateWithSource(ctx, ConversationCreate{
+		UserID:  userID,
+		Title:   title,
+		Channel: "web",
+		Source:  "web_chat",
+	})
 }
 
 func (s *ConversationStore) CreateWithChannel(ctx context.Context, userID, title, channel string) (Conversation, error) {
+	return s.CreateWithSource(ctx, ConversationCreate{
+		UserID:  userID,
+		Title:   title,
+		Channel: channel,
+		Source:  "web_chat",
+	})
+}
+
+type ConversationCreate struct {
+	UserID                   string
+	Title                    string
+	Channel                  string
+	Source                   string
+	ChannelConnectionID      *string
+	ExternalConversationID   *string
+	ExternalConversationType *string
+	ExternalScopeID          *string
+	ExternalTitle            *string
+}
+
+func (s *ConversationStore) CreateWithSource(ctx context.Context, input ConversationCreate) (Conversation, error) {
+	source := strings.TrimSpace(input.Source)
+	if source == "" {
+		source = "web_chat"
+	}
+	channel := strings.TrimSpace(input.Channel)
+	if channel == "" {
+		channel = "web"
+	}
 	query := `
-		INSERT INTO conversations (id, user_id, title, channel)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, user_id, title, channel, status, created_at, updated_at
+		INSERT INTO conversations (
+			id, user_id, title, channel, source, channel_connection_id, external_conversation_id,
+			external_conversation_type, external_scope_id, external_title
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, user_id, title, channel, source, channel_connection_id, external_conversation_id,
+			external_conversation_type, external_scope_id, external_title, status, created_at, updated_at
 	`
-	return scanConversation(s.db.QueryRow(ctx, query, uuid.NewString(), userID, title, channel))
+	return scanConversation(s.db.QueryRow(ctx, query, uuid.NewString(), input.UserID, input.Title, channel, source,
+		input.ChannelConnectionID, input.ExternalConversationID, input.ExternalConversationType, input.ExternalScopeID, input.ExternalTitle))
 }
 
 func (s *ConversationStore) List(ctx context.Context, userID string) ([]Conversation, error) {
+	return s.ListBySource(ctx, userID, "")
+}
+
+func (s *ConversationStore) ListWeb(ctx context.Context, userID string) ([]Conversation, error) {
+	return s.ListBySource(ctx, userID, "web_chat")
+}
+
+func (s *ConversationStore) ListBySource(ctx context.Context, userID, source string) ([]Conversation, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id, user_id, title, channel, status, created_at, updated_at
+		SELECT id, user_id, title, channel, source, channel_connection_id, external_conversation_id,
+			external_conversation_type, external_scope_id, external_title, status, created_at, updated_at
 		FROM conversations
 		WHERE user_id = $1 AND status <> 'deleted'
+		  AND ($2::text = '' OR source = $2)
 		ORDER BY updated_at DESC, created_at DESC
-	`, userID)
+	`, userID, source)
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +142,23 @@ func (s *ConversationStore) List(ctx context.Context, userID string) ([]Conversa
 
 func (s *ConversationStore) FindByID(ctx context.Context, userID, conversationID string) (Conversation, error) {
 	query := `
-		SELECT id, user_id, title, channel, status, created_at, updated_at
+		SELECT id, user_id, title, channel, source, channel_connection_id, external_conversation_id,
+			external_conversation_type, external_scope_id, external_title, status, created_at, updated_at
 		FROM conversations
 		WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 	`
 	return scanConversation(s.db.QueryRow(ctx, query, conversationID, userID))
+}
+
+func (s *ConversationStore) EnsureWebChat(ctx context.Context, userID, conversationID string) (Conversation, error) {
+	conversation, err := s.FindByID(ctx, userID, conversationID)
+	if err != nil {
+		return Conversation{}, err
+	}
+	if conversation.Source != "web_chat" {
+		return Conversation{}, ErrConversationReadonlyInWeb
+	}
+	return conversation, nil
 }
 
 func (s *ConversationStore) ListMessages(ctx context.Context, userID, conversationID string) ([]Message, error) {
@@ -122,6 +189,13 @@ func (s *ConversationStore) ListMessages(ctx context.Context, userID, conversati
 }
 
 func (s *ConversationStore) CreateUserMessage(ctx context.Context, userID, conversationID, content string) (Message, error) {
+	return s.CreateUserMessageWithMetadata(ctx, userID, conversationID, content, nil)
+}
+
+func (s *ConversationStore) CreateUserMessageWithMetadata(ctx context.Context, userID, conversationID, content string, metadata json.RawMessage) (Message, error) {
+	if len(metadata) == 0 {
+		metadata = json.RawMessage(`{}`)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Message{}, err
@@ -129,7 +203,8 @@ func (s *ConversationStore) CreateUserMessage(ctx context.Context, userID, conve
 	defer tx.Rollback(ctx)
 
 	if _, err := scanConversation(tx.QueryRow(ctx, `
-		SELECT id, user_id, title, channel, status, created_at, updated_at
+		SELECT id, user_id, title, channel, source, channel_connection_id, external_conversation_id,
+			external_conversation_type, external_scope_id, external_title, status, created_at, updated_at
 		FROM conversations
 		WHERE id = $1 AND user_id = $2 AND status = 'active'
 	`, conversationID, userID)); err != nil {
@@ -139,9 +214,9 @@ func (s *ConversationStore) CreateUserMessage(ctx context.Context, userID, conve
 	isAnchor, anchorReason := detectAnchor(content)
 	userMessage, err := scanMessage(tx.QueryRow(ctx, `
 		INSERT INTO messages (id, conversation_id, user_id, role, content, token_count, is_anchor, anchor_reason, metadata)
-		VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, '{}'::jsonb)
+		VALUES ($1, $2, $3, 'user', $4, $5, $6, $7, $8)
 		RETURNING id, conversation_id, user_id, role, content, token_count, is_anchor, anchor_reason, metadata, created_at
-	`, uuid.NewString(), conversationID, userID, content, estimateMessageTokens(content), isAnchor, anchorReason))
+	`, uuid.NewString(), conversationID, userID, content, estimateMessageTokens(content), isAnchor, anchorReason, metadata))
 	if err != nil {
 		return Message{}, err
 	}
@@ -240,6 +315,12 @@ func scanConversation(row pgx.Row) (Conversation, error) {
 		&conversation.UserID,
 		&conversation.Title,
 		&conversation.Channel,
+		&conversation.Source,
+		&conversation.ChannelConnectionID,
+		&conversation.ExternalConversationID,
+		&conversation.ExternalConversationType,
+		&conversation.ExternalScopeID,
+		&conversation.ExternalTitle,
 		&conversation.Status,
 		&conversation.CreatedAt,
 		&conversation.UpdatedAt,

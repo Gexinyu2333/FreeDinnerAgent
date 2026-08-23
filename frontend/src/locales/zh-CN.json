@@ -6,8 +6,8 @@
   "auth": {
     "heroEyebrow": "FreeDinnerAgent",
     "heroTitle": "把你的 Agent、记忆、工具和入口收进一个控制台。",
-    "heroDescription": "先从登录、配置和 Web Chat 跑通，再逐步接入记忆、心跳任务、QQ 入口和 Workspace。",
-    "localFirstHint": "开发期默认连接本地后端：http://localhost:8080",
+    "heroDescription": "一个面向个人场景的 AI 助理工作台，集中管理对话、长期记忆、模型配置、自动任务和外部入口。",
+    "localFirstHint": "本地优先，配置和记忆保存在你的后端服务中。",
     "logout": "退出",
     "fields": {
       "username": "用户名",
@@ -53,9 +53,17 @@
     "reset": "重置",
     "refresh": "刷新",
     "retry": "重试",
+    "approved": "已通过",
+    "created": "创建成功",
+    "deleted": "删除成功",
+    "rejected": "已拒绝",
+    "sent": "已发送",
     "save": "保存",
+    "saved": "保存成功",
     "saving": "保存中",
-    "search": "搜索"
+    "search": "搜索",
+    "showSecret": "显示内容",
+    "hideSecret": "隐藏内容"
   },
   "memory": {
     "description": "维护画像记忆，查看一次检索会拼入哪些上下文，并处理 Dreaming 产生的候选 insight。",
@@ -381,6 +389,11 @@
     "connection": {
       "create": "创建连接",
       "created": "Channel 连接已创建",
+      "deleted": "Channel 连接已删除",
+      "deleteConfirm": "确定删除连接「{{name}}」吗？",
+      "edit": "编辑连接",
+      "save": "保存连接",
+      "updated": "Channel 连接已保存",
       "accessToken": "NapCat 访问 Token",
       "messageApiUrl": "NapCat HTTP API URL，用于发送 /send_msg",
       "eventStreamUrl": "NapCat HTTP SSE 服务器 URL，用于后续监听事件",
@@ -393,8 +406,14 @@
       "noEndpoints": "暂无 endpoint 配置",
       "noExternalAccount": "未填写外部账号",
       "provider": "Provider",
+      "setupDescription": "连接配置通过弹窗编辑，Endpoint、Token 和 Secret 不再长期铺在控制台页面里。",
       "webhookCallbackUrl": "FreeDinnerAgent Webhook URL，填到 NapCat HTTP 客户端",
       "webhookSecret": "Webhook Secret / Token"
+    },
+    "endpointType": {
+      "event_stream": "事件流",
+      "message_api": "消息 API",
+      "webhook_callback": "Webhook 回调"
     },
     "connections": {
       "title": "连接列表",
@@ -414,11 +433,29 @@
       "inbox": "Inbox",
       "outbox": "Outbox"
     },
+    "sections": {
+      "overview": "概览",
+      "setup": "连接配置",
+      "policies": "监听策略",
+      "inbox": "Inbox",
+      "outbox": "Outbox",
+      "sessions": "外部会话",
+      "logs": "Logs"
+    },
+    "overview": {
+      "latestInbox": "最近事件",
+      "latestOutbox": "最近外发",
+      "sessions": "外部会话"
+    },
     "policy": {
       "allowMemoryWrite": "允许写入记忆",
       "allowToolUse": "允许使用工具",
+      "create": "创建策略",
       "current": "当前策略",
       "empty": "暂无策略。创建连接时会自动生成默认私聊和群聊策略。",
+      "deleteConfirm": "确定删除策略「{{name}}」吗？",
+      "deleted": "Channel 策略已删除",
+      "editTitle": "编辑策略",
       "externalScopeId": "外部 Scope ID，留空表示默认策略",
       "globalScope": "默认 Scope",
       "rateLimit": "每分钟 {{count}} 次",
@@ -440,6 +477,7 @@
     },
     "inbox": {
       "noText": "无文本内容",
+      "rawPayload": "查看原始事件",
       "triggered": "已触发",
       "empty": {
         "description": "外部 webhook 收到消息后，这里会显示标准化后的 inbox event。",
@@ -451,6 +489,11 @@
       "cancel": "取消",
       "requiresApproval": "需审批",
       "send": "发送",
+      "success": {
+        "approve": "Outbox 已通过",
+        "cancel": "Outbox 已取消",
+        "send": "Outbox 已发送"
+      },
       "confirm": {
         "cancel": "确定取消这条 outbox 草稿吗？",
         "send": "确定发送这条已审批 outbox 消息吗？"
@@ -472,6 +515,24 @@
       "empty": {
         "description": "外部私聊或群聊绑定到 Web conversation 后，会在这里出现。",
         "title": "暂无外部对话"
+      }
+    },
+    "sessions": {
+      "createOutboxDraft": "创建外发草稿",
+      "draftCreated": "外发草稿已创建",
+      "noMessages": "这个外部会话还没有可展示的 transcript。",
+      "outboxDraftDescription": "这里不会直接向外部平台发送消息，只会生成 Outbox 草稿，再按策略审批或发送。",
+      "outboxDraftPlaceholder": "写一条准备发送到这个外部会话的回复",
+      "outboxDraftTitle": "人工接管回复",
+      "readonly": "只读",
+      "readonlyDescription": "这是外部 Channel 的监听会话，不能在 Web Chat 输入框里直接回复；需要发送时请走 Outbox。",
+      "selectDescription": "选择一个 QQ 群聊、私聊或后续接入的外部会话，查看只读 transcript。",
+      "selectTitle": "选择外部会话"
+    },
+    "logs": {
+      "empty": {
+        "description": "入站事件、外发草稿和发送结果会在这里形成调试时间线。",
+        "title": "暂无 Channel Logs"
       }
     }
   },
@@ -588,6 +649,8 @@
       "activeDescription": "Web Chat 主动触发 Agent Loop",
       "emptyDescription": "创建会话后开始聊天",
       "noConversation": "未选择会话",
+      "readonlyDescription": "这个地址不属于 Web Chat 主动对话。外部入口会话请到 Channels 页面查看只读转录，并通过 Outbox 草稿外发。",
+      "readonlyTitle": "外部入口会话只读",
       "waitingForAssistant": "Agent 正在生成回复"
     },
     "sidebar": {

@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(200) NOT NULL DEFAULT '新的对话',
     channel VARCHAR(40) NOT NULL DEFAULT 'web',
+    source VARCHAR(40) NOT NULL DEFAULT 'web_chat' CHECK (source IN ('web_chat', 'channel', 'scheduled_job')),
+    channel_connection_id UUID,
+    external_conversation_id VARCHAR(160),
+    external_conversation_type VARCHAR(40) CHECK (external_conversation_type IN ('private_chat', 'group_chat', 'channel', 'thread')),
+    external_scope_id VARCHAR(160),
+    external_title VARCHAR(200),
     status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1039,6 +1045,8 @@ CREATE TABLE IF NOT EXISTS curator_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversations_user_id_status ON conversations(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_source_status ON conversations(user_id, source, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_channel_external ON conversations(channel_connection_id, external_conversation_id) WHERE source = 'channel';
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_expires ON user_sessions(user_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_user_model_providers_user_status ON user_model_providers(user_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_model_providers_one_default

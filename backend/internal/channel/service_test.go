@@ -55,10 +55,74 @@ func TestNormalizeOneBotGroupMessageStripsMention(t *testing.T) {
 	}
 }
 
+func TestNormalizeOneBotArrayMessageUsesSelfIDForMention(t *testing.T) {
+	raw := []byte(`{
+		"post_type":"message",
+		"message_type":"group",
+		"message_id":1446563322,
+		"self_id":3657538608,
+		"group_id":884918314,
+		"user_id":1106861129,
+		"raw_message":"[CQ:at,qq=3657538608] 说话",
+		"message":[
+			{"type":"at","data":{"qq":"3657538608"}},
+			{"type":"text","data":{"text":" 说话"}}
+		],
+		"sender":{"card":"","nickname":"."}
+	}`)
+
+	event, err := normalizeOneBot(raw, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Text != "说话" {
+		t.Fatalf("expected self_id mention stripped, got %q", event.Text)
+	}
+	ok, reason := shouldTrigger(event, store.ChannelPolicy{Mode: "mention_only"}, nil)
+	if !ok || reason != "mention" {
+		t.Fatalf("expected array mention trigger, got ok=%v reason=%s", ok, reason)
+	}
+}
+
 func TestSummarizeOneBotMessageAttachments(t *testing.T) {
-	got := summarizeOneBotMessage("看图 [CQ:image,file=abc,url=http://secret] 和文件 [CQ:file,name=a.pdf]")
-	if got != "看图 [图片附件] 和文件 [文件附件]" {
+	got := summarizeOneBotMessage("看图 [CQ:image,file=abc,url=http://secret] 和文件 [CQ:file,name=a.pdf] 还有 [CQ:json,data={\"title\":\"x\"}]")
+	if got != "看图 [图片附件] 和文件 [文件附件] 还有 [卡片消息]" {
 		t.Fatalf("unexpected summary: %q", got)
+	}
+}
+
+func TestChannelConversationCreateUsesChannelSourceAndExternalBinding(t *testing.T) {
+	scopeID := "462934780"
+	title := "QQ 群 462934780"
+	connection := store.ChannelConnection{
+		ID:     "conn-1",
+		UserID: "user-1",
+	}
+	event := normalizedEvent{
+		ExternalConversationID:   "group-462934780",
+		ExternalConversationType: "group_chat",
+		ExternalScopeID:          &scopeID,
+		ExternalTitle:            &title,
+	}
+
+	input := channelConversationCreate(connection, event)
+	if input.Source != "channel" || input.Channel != "channel" {
+		t.Fatalf("expected channel source, got source=%q channel=%q", input.Source, input.Channel)
+	}
+	if input.ChannelConnectionID == nil || *input.ChannelConnectionID != connection.ID {
+		t.Fatalf("expected channel connection binding, got %#v", input.ChannelConnectionID)
+	}
+	if input.ExternalConversationID == nil || *input.ExternalConversationID != event.ExternalConversationID {
+		t.Fatalf("expected external conversation binding, got %#v", input.ExternalConversationID)
+	}
+	if input.ExternalConversationType == nil || *input.ExternalConversationType != "group_chat" {
+		t.Fatalf("expected external conversation type, got %#v", input.ExternalConversationType)
+	}
+	if input.ExternalScopeID == nil || *input.ExternalScopeID != scopeID {
+		t.Fatalf("expected external scope id, got %#v", input.ExternalScopeID)
+	}
+	if input.Title != title || input.ExternalTitle == nil || *input.ExternalTitle != title {
+		t.Fatalf("expected external title to be preserved, got title=%q external=%#v", input.Title, input.ExternalTitle)
 	}
 }
 

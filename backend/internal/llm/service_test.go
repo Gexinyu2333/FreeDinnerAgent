@@ -1,6 +1,8 @@
 package llm
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"freedinner/backend/internal/store"
@@ -71,5 +73,28 @@ func TestLLMFeatureSupportsProviderOverride(t *testing.T) {
 	}
 	if dreaming.ProviderID != "provider-dream" {
 		t.Fatalf("expected disabled feature to still parse provider id for UI roundtrip, got %q", dreaming.ProviderID)
+	}
+}
+
+func TestRenderChannelContextIncludesExternalIdentity(t *testing.T) {
+	metadata, _ := json.Marshal(map[string]any{
+		"channel":                    "qq",
+		"external_conversation_id":   "462934780",
+		"external_conversation_type": "group_chat",
+		"external_scope_id":          "462934780",
+		"external_sender_id":         "1106861129",
+		"external_sender_name":       "Seia",
+	})
+	got := renderChannelContext(store.Message{Metadata: metadata})
+	for _, expected := range []string{
+		"外部 Channel",
+		"Channel provider: qq",
+		"External conversation: group_chat (462934780)",
+		"Sender: Seia (1106861129)",
+		"Channel Outbox",
+	} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("expected %q in channel context:\n%s", expected, got)
+		}
 	}
 }

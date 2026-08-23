@@ -4,13 +4,18 @@ import {
   approveOutboxMessage,
   cancelOutboxMessage,
   createChannelConnection,
+  createOutboxDraft,
+  deleteChannelConnection,
+  deleteChannelPolicy,
   listChannelConnections,
+  listExternalConversationMessages,
   listChannelPolicies,
   listChannelProviders,
   listExternalConversations,
   listInboxEvents,
   listOutboxMessages,
   sendOutboxMessage,
+  updateChannelConnection,
   upsertChannelPolicy
 } from "./api";
 
@@ -18,6 +23,7 @@ export const channelProvidersQueryKey = ["channels", "providers"] as const;
 export const channelConnectionsQueryKey = ["channels", "connections"] as const;
 export const channelPoliciesQueryKey = ["channels", "policies"] as const;
 export const channelExternalConversationsQueryKey = ["channels", "external-conversations"] as const;
+export const channelExternalConversationMessagesQueryKey = ["channels", "external-conversation-messages"] as const;
 export const channelInboxQueryKey = ["channels", "inbox"] as const;
 export const channelOutboxQueryKey = ["channels", "outbox"] as const;
 
@@ -41,6 +47,18 @@ export function useCreateChannelConnection() {
   });
 }
 
+export function useUpdateChannelConnection() {
+  return useMutation({
+    mutationFn: updateChannelConnection
+  });
+}
+
+export function useDeleteChannelConnection() {
+  return useMutation({
+    mutationFn: deleteChannelConnection
+  });
+}
+
 export function useChannelPolicies(connectionID?: string) {
   return useQuery({
     enabled: Boolean(connectionID),
@@ -55,11 +73,36 @@ export function useUpsertChannelPolicy() {
   });
 }
 
+export function useDeleteChannelPolicy() {
+  return useMutation({
+    mutationFn: deleteChannelPolicy
+  });
+}
+
 export function useExternalConversations(connectionID?: string) {
   return useQuery({
     enabled: Boolean(connectionID),
     queryKey: [...channelExternalConversationsQueryKey, connectionID],
     queryFn: () => listExternalConversations(connectionID as string)
+  });
+}
+
+export function useExternalConversationMessages(
+  connectionID?: string,
+  externalConversationID?: string
+) {
+  return useQuery({
+    enabled: Boolean(connectionID && externalConversationID),
+    queryKey: [
+      ...channelExternalConversationMessagesQueryKey,
+      connectionID,
+      externalConversationID
+    ],
+    queryFn: () =>
+      listExternalConversationMessages(
+        connectionID as string,
+        externalConversationID as string
+      )
   });
 }
 
@@ -94,5 +137,11 @@ export function useCancelOutboxMessage() {
 export function useSendOutboxMessage() {
   return useMutation({
     mutationFn: sendOutboxMessage
+  });
+}
+
+export function useCreateOutboxDraft() {
+  return useMutation({
+    mutationFn: createOutboxDraft
   });
 }

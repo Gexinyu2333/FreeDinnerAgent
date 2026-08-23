@@ -25,7 +25,7 @@ export function Button({
   return (
     <button
       className={[
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex h-10 max-w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
         variantClass[variant],
         className
       ].join(" ")}

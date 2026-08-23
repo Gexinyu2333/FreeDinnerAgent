@@ -143,6 +143,15 @@ type ChannelConnectionCreate struct {
 	Metadata            json.RawMessage
 }
 
+type ChannelConnectionUpdate struct {
+	UserID              string
+	ConnectionID        string
+	DisplayName         string
+	ExternalAccountID   *string
+	ExternalAccountName *string
+	EncryptedConfig     json.RawMessage
+}
+
 type ChannelConnectionEndpoint struct {
 	ID                  string          `json:"id"`
 	UserID              string          `json:"user_id"`

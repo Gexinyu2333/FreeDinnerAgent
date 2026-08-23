@@ -14,11 +14,32 @@ import (
 )
 
 type ChannelHandler struct {
-	channels *channelsvc.Service
+	channels channelService
 }
 
 func NewChannelHandler(channels *channelsvc.Service) *ChannelHandler {
 	return &ChannelHandler{channels: channels}
+}
+
+type channelService interface {
+	ListProviders(ctx context.Context) ([]store.ChannelProviderDefinition, error)
+	CreateConnection(ctx context.Context, input channelsvc.CreateConnectionInput) (store.ChannelConnection, error)
+	ListConnections(ctx context.Context, userID string) ([]store.ChannelConnection, error)
+	UpdateConnection(ctx context.Context, input channelsvc.UpdateConnectionInput) (store.ChannelConnection, error)
+	DeleteConnection(ctx context.Context, userID, connectionID string) error
+	ListEndpoints(ctx context.Context, userID, connectionID string) ([]store.ChannelConnectionEndpoint, error)
+	UpsertPolicy(ctx context.Context, input channelsvc.UpsertPolicyInput) (store.ChannelPolicy, error)
+	ListPolicies(ctx context.Context, userID, connectionID string) ([]store.ChannelPolicy, error)
+	DeletePolicy(ctx context.Context, userID, connectionID, policyID string) error
+	HandleWebhook(ctx context.Context, connectionID, providedSecret string, rawPayload []byte) (channelsvc.WebhookResult, error)
+	ListExternalConversations(ctx context.Context, userID, connectionID string, limit int) ([]store.ExternalConversation, error)
+	ListExternalConversationMessages(ctx context.Context, userID, connectionID, externalConversationID string) ([]store.Message, error)
+	ListInboxEvents(ctx context.Context, userID, connectionID string, limit int) ([]store.ChannelInboxEvent, error)
+	ListOutboxMessages(ctx context.Context, userID, connectionID string, status *string, limit int) ([]store.ChannelOutboxMessage, error)
+	CreateOutboxDraft(ctx context.Context, input channelsvc.CreateOutboxDraftInput) (store.ChannelOutboxMessage, error)
+	ApproveOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error)
+	CancelOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error)
+	SendOutboxMessage(ctx context.Context, userID, outboxID string) (store.ChannelOutboxMessage, error)
 }
 
 type createChannelConnectionRequest struct {
@@ -50,6 +71,12 @@ type upsertChannelPolicyRequest struct {
 	RequireApprovalForOutbound *bool           `json:"require_approval_for_outbound"`
 	RateLimitPerMinute         *int            `json:"rate_limit_per_minute"`
 	RateLimitPolicy            json.RawMessage `json:"rate_limit_policy"`
+}
+
+type createOutboxDraftRequest struct {
+	Content          string `json:"content" binding:"required"`
+	MessageType      string `json:"message_type"`
+	RequiresApproval *bool  `json:"requires_approval"`
 }
 
 func (h *ChannelHandler) Providers(c *gin.Context) {
@@ -127,6 +154,65 @@ func (h *ChannelHandler) Connections(c *gin.Context) {
 	OK(c, data)
 }
 
+func (h *ChannelHandler) UpdateConnection(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+
+	var req createChannelConnectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.DisplayName) == "" {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "display_name is required")
+		return
+	}
+
+	connection, err := h.channels.UpdateConnection(c.Request.Context(), channelsvc.UpdateConnectionInput{
+		UserID:              userID,
+		ConnectionID:        c.Param("connection_id"),
+		DisplayName:         req.DisplayName,
+		ExternalAccountID:   req.ExternalAccountID,
+		ExternalAccountName: req.ExternalAccountName,
+		Endpoints:           toEndpointInputs(req.Endpoints),
+		Config:              req.Config,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "channel connection not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update channel connection")
+		return
+	}
+	data, err := h.publicConnection(c.Request.Context(), userID, connection)
+	if err != nil {
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load channel connection endpoints")
+		return
+	}
+	OK(c, data)
+}
+
+func (h *ChannelHandler) DeleteConnection(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	if err := h.channels.DeleteConnection(c.Request.Context(), userID, c.Param("connection_id")); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "channel connection not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete channel connection")
+		return
+	}
+	OK(c, gin.H{"deleted": true})
+}
+
 func (h *ChannelHandler) publicConnection(ctx context.Context, userID string, connection store.ChannelConnection) (store.PublicChannelConnection, error) {
 	data := store.ToPublicChannelConnection(connection)
 	endpoints, err := h.channels.ListEndpoints(ctx, userID, connection.ID)
@@ -202,6 +288,23 @@ func (h *ChannelHandler) Policies(c *gin.Context) {
 	writeChannelList(c, policies, err)
 }
 
+func (h *ChannelHandler) DeletePolicy(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	if err := h.channels.DeletePolicy(c.Request.Context(), userID, c.Param("connection_id"), c.Param("policy_id")); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			Error(c, http.StatusNotFound, "NOT_FOUND", "channel policy not found")
+			return
+		}
+		Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete channel policy")
+		return
+	}
+	OK(c, gin.H{"deleted": true})
+}
+
 func (h *ChannelHandler) Webhook(c *gin.Context) {
 	secret := webhookSecret(c)
 	raw, err := c.GetRawData()
@@ -258,6 +361,16 @@ func (h *ChannelHandler) ExternalConversations(c *gin.Context) {
 	writeChannelList(c, items, err)
 }
 
+func (h *ChannelHandler) ExternalConversationMessages(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	items, err := h.channels.ListExternalConversationMessages(c.Request.Context(), userID, c.Param("connection_id"), c.Param("external_conversation_id"))
+	writeChannelList(c, items, err)
+}
+
 func (h *ChannelHandler) InboxEvents(c *gin.Context) {
 	userID, ok := CurrentUserID(c)
 	if !ok {
@@ -277,6 +390,39 @@ func (h *ChannelHandler) OutboxMessages(c *gin.Context) {
 	status := trimAPIString(queryStringPtr(c, "status"))
 	items, err := h.channels.ListOutboxMessages(c.Request.Context(), userID, c.Param("connection_id"), status, parseLimit(c.Query("limit")))
 	writeChannelList(c, items, err)
+}
+
+func (h *ChannelHandler) CreateOutboxDraft(c *gin.Context) {
+	userID, ok := CurrentUserID(c)
+	if !ok {
+		Error(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing user context")
+		return
+	}
+	var req createOutboxDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Error(c, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	message, err := h.channels.CreateOutboxDraft(c.Request.Context(), channelsvc.CreateOutboxDraftInput{
+		UserID:                 userID,
+		ConnectionID:           c.Param("connection_id"),
+		ExternalConversationID: c.Param("external_conversation_id"),
+		Content:                req.Content,
+		MessageType:            req.MessageType,
+		RequiresApproval:       req.RequiresApproval,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrInvalidInput):
+			Error(c, http.StatusBadRequest, "BAD_REQUEST", "outbox content is required")
+		case errors.Is(err, store.ErrNotFound):
+			Error(c, http.StatusNotFound, "NOT_FOUND", "channel external conversation not found")
+		default:
+			Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create outbox draft")
+		}
+		return
+	}
+	OK(c, message)
 }
 
 func (h *ChannelHandler) ApproveOutbox(c *gin.Context) {

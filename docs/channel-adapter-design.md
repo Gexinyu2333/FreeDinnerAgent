@@ -60,6 +60,7 @@ Provider 保存平台级能力：
 - 支持哪些入站模式：webhook、websocket、polling。
 - 支持哪些出站模式：send_message、send_image、send_card。
 - 配置 schema。
+- 前端表单 metadata：`metadata.form.identity_fields`、`secret_fields`、`endpoint_fields` 和 `config_bindings` 描述连接配置 UI、endpoint 模板、secret 字段如何映射到 connection config。
 - 默认触发策略。
 
 ### 3.2 Channel Connection
@@ -89,6 +90,14 @@ Discord channel 222 -> conversation_id
 
 这样 Agent 的内部逻辑永远只面对统一的 conversation，不需要知道消息来自 QQ 还是飞书。
 
+本地 `conversations` 主表同时保存 `source`：
+
+- `web_chat`：用户在 Web Chat 页面主动创建的普通对话。
+- `channel`：由外部 Channel 监听入口创建或复用的会话。
+- `scheduled_job`：由心跳任务或定时任务触发的会话或运行上下文。
+
+Channel 会话会同步保存 `channel_connection_id`、`external_conversation_id`、`external_conversation_type`、`external_scope_id` 和 `external_title`。普通 Web Chat 列表只查询 `source = web_chat`；Channel 会话在 Channels 页面内作为只读 transcript 展示，不显示普通 Web Chat 输入框。
+
 ### 3.4 Inbox / Outbox
 
 `channel_inbox_events` 保存外部平台进来的原始事件和规范化文本。
@@ -102,6 +111,8 @@ Discord channel 222 -> conversation_id
 - 可以审计。
 - 可以限流。
 - 可以在失败时保留草稿。
+
+从 Web 人工介入外部平台时，也不应该调用 Web Chat send message，而应该创建或处理 `channel_outbox_messages`。这样“发到 QQ / Discord / 微信”的语义和审计链路都很明确。
 
 ## 4. QQ 接入方式
 
@@ -164,10 +175,10 @@ NapCatQQ send_msg API 发送
 
 ```go
 type ChannelAdapter interface {
-    VerifyInbound(ctx context.Context, req InboundRequest) error
-    NormalizeEvent(ctx context.Context, raw []byte) (*ChannelEvent, error)
-    SendMessage(ctx context.Context, msg OutboxMessage) (*SendResult, error)
-    HealthCheck(ctx context.Context, conn ChannelConnection) (*HealthStatus, error)
+    VerifyInbound(ctx context.Context, req InboundRequest, cfg connectionConfig) error
+    NormalizeEvent(ctx context.Context, raw []byte, botAccountID *string) (normalizedEvent, error)
+    BuildSendPayload(ctx context.Context, msg OutboxMessage) (json.RawMessage, error)
+    HealthCheck(ctx context.Context, conn ChannelConnection, cfg connectionConfig) (HealthStatus, error)
 }
 ```
 
@@ -289,6 +300,11 @@ NapCatQQ MCP Server
 - 出站回复会调用 Agent Loop 生成真实 assistant message，写入 `channel_outbox_messages`，并生成 OneBot `send_msg` payload；群聊默认 `pending`，私聊默认 `approved`。
 - 已支持用户审批或取消 pending outbox 草稿：`POST /api/v1/channel-outbox-messages/{outbox_id}/approve|cancel`。
 - 已支持显式发送 approved outbox：`POST /api/v1/channel-outbox-messages/{outbox_id}/send` 会调用 NapCat/OneBot `/send_msg` endpoint，并回写 `sent` 或 `failed`。
+- 已在 `conversations.source` 上区分 `web_chat`、`channel` 和 `scheduled_job`；普通 Web Chat list 只返回 `web_chat`，普通 Web Chat send 会拒绝 `channel` 会话并返回 `CHANNEL_CONVERSATION_READONLY_IN_WEB`。
+- 已提供 Channel transcript 接口：`GET /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/messages`，用于在 Channels 页面查看只读外部会话。
+- 已提供人工外发草稿接口：`POST /api/v1/me/channel-connections/{connection_id}/external-conversations/{external_conversation_id}/outbox-drafts`，用于从只读 transcript 创建 Outbox 草稿。
+- Channels 前端已按 provider `metadata.form` 渲染连接配置字段；NapCatQQ 只是内置 provider，后续新增 WeChat / Discord / Telegram / 飞书 provider definition 时，可通过新增 endpoint schema 与 adapter 扩展，不需要给核心 conversation/chat 表加平台专属字段。
+- Channels 前端已拆出 Overview、Setup、Policies、Sessions、Inbox、Outbox 和 Logs；Inbox raw payload 默认折叠展示，Session transcript 只读，人工回复进入 Outbox 草稿。
 - 服务启动时可按 `CHANNEL_SENDER_ENABLED`、`CHANNEL_SENDER_INTERVAL` 和 `CHANNEL_SENDER_BATCH_SIZE` 启动 outbox sender worker，自动发送 approved outbox。
 - OneBot 文本中的图片、文件、语音、视频和卡片 CQ 码会被归一化为附件摘要，避免在 normalized text 中保存敏感 URL 或原始附件参数。
 - 群聊限频已经按最近 1 分钟 triggered inbox event 计数拦截，并支持在 policy metadata 中配置多窗口 `rate_limits`、用户级 `user_rate_limits` 和 `circuit_breaker` 熔断。

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -36,13 +37,13 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:              ":" + cfg.ServerPort,
+		Addr:              fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort),
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	go func() {
-		log.Printf("FreeDinnerAgent backend listening on http://localhost:%s", cfg.ServerPort)
+		log.Printf("FreeDinnerAgent backend listening on http://%s:%s", cfg.ServerHost, cfg.ServerPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}

@@ -9,7 +9,7 @@ export function Switch({ checked, className = "", ...props }: SwitchProps) {
     <button
       aria-checked={checked}
       className={[
-        "relative h-6 w-11 rounded-full transition",
+        "relative h-6 w-11 shrink-0 rounded-full transition",
         checked ? "bg-ocean-600" : "bg-ink-200",
         className
       ].join(" ")}

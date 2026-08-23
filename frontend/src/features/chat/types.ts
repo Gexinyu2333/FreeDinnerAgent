@@ -3,6 +3,12 @@ export type Conversation = {
   user_id: string;
   title: string;
   channel: string;
+  source: "web_chat" | "channel" | "scheduled_job";
+  channel_connection_id: string | null;
+  external_conversation_id: string | null;
+  external_conversation_type: string | null;
+  external_scope_id: string | null;
+  external_title: string | null;
   status: string;
   created_at: string;
   updated_at: string;

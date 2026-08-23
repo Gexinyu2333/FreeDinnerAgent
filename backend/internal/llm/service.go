@@ -2,7 +2,10 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"freedinner/backend/internal/agent"
 	"freedinner/backend/internal/contextmgr"
@@ -63,6 +66,10 @@ func NewService(
 }
 
 func (s *Service) SendMessage(ctx context.Context, userID, conversationID, content string) (store.SendMessageResult, error) {
+	if _, err := s.conversations.EnsureWebChat(ctx, userID, conversationID); err != nil {
+		return store.SendMessageResult{}, err
+	}
+
 	cfg, err := s.agentConfigs.GetDefault(ctx, userID)
 	if err != nil {
 		return store.SendMessageResult{}, err
@@ -109,9 +116,10 @@ func (s *Service) SendMessage(ctx context.Context, userID, conversationID, conte
 		return store.SendMessageResult{}, err
 	}
 	_, _ = s.harness.AddEvent(ctx, event(turn, "turn_started", map[string]any{
-		"mode":     "minimal_llm",
-		"provider": provider.Provider,
-		"model":    provider.DefaultChatModel,
+		"mode":           "minimal_llm",
+		"trigger_source": "web_chat",
+		"provider":       provider.Provider,
+		"model":          provider.DefaultChatModel,
 	}))
 	if _, err := s.harness.StartTurn(ctx, turn.ID, userID, conversationID); err != nil {
 		return store.SendMessageResult{}, err
@@ -202,9 +210,11 @@ func (s *Service) RespondToExistingMessage(ctx context.Context, userID, conversa
 		return store.SendMessageResult{}, err
 	}
 	_, _ = s.harness.AddEvent(ctx, event(turn, "turn_started", map[string]any{
-		"mode":     "channel_agent_loop",
-		"provider": provider.Provider,
-		"model":    provider.DefaultChatModel,
+		"mode":            "channel_agent_loop",
+		"trigger_source":  "channel",
+		"provider":        provider.Provider,
+		"model":           provider.DefaultChatModel,
+		"channel_context": channelContextMap(message),
 	}))
 	if _, err := s.harness.StartTurn(ctx, turn.ID, userID, conversationID); err != nil {
 		return store.SendMessageResult{}, err
@@ -219,6 +229,9 @@ func (s *Service) RespondToExistingMessage(ctx context.Context, userID, conversa
 	}
 	s.maybeAutoCompress(ctx, userID, conversationID, messages, contextResult.Report, cfg, provider, apiKey)
 	input := toChatMessages(contextResult.Input)
+	if channelContext := renderChannelContext(message); channelContext != "" {
+		input = append(input, ChatMessage{Role: "system", Content: channelContext})
+	}
 	route := agent.RouteResult{}
 	if cfg.ToolUseEnabled && s.tools != nil {
 		route, _ = s.tools.RouteAgentTools(ctx, agent.ToolRouteInput{
@@ -248,4 +261,82 @@ func (s *Service) RespondToExistingMessage(ctx context.Context, userID, conversa
 		return result, err
 	}
 	return result, nil
+}
+
+func channelContextMap(message store.Message) map[string]any {
+	var metadata map[string]any
+	if err := json.Unmarshal(message.Metadata, &metadata); err != nil {
+		return map[string]any{}
+	}
+	keys := []string{
+		"channel",
+		"channel_connection_id",
+		"external_conversation_id",
+		"external_conversation_type",
+		"external_conversation_title",
+		"external_scope_id",
+		"external_scope_type",
+		"external_sender_id",
+		"external_sender_name",
+	}
+	result := make(map[string]any, len(keys))
+	for _, key := range keys {
+		if value, ok := metadata[key]; ok && value != nil {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func renderChannelContext(message store.Message) string {
+	metadata := channelContextMap(message)
+	if len(metadata) == 0 {
+		return ""
+	}
+	provider := stringValue(metadata["channel"])
+	conversationType := stringValue(metadata["external_conversation_type"])
+	conversationID := stringValue(metadata["external_conversation_id"])
+	scopeID := stringValue(metadata["external_scope_id"])
+	title := stringValue(metadata["external_conversation_title"])
+	senderID := stringValue(metadata["external_sender_id"])
+	senderName := stringValue(metadata["external_sender_name"])
+	if provider == "" {
+		provider = "external channel"
+	}
+	scopeLabel := conversationType
+	if title != "" {
+		scopeLabel = strings.TrimSpace(scopeLabel + " " + title)
+	}
+	lines := []string{
+		"当前消息来自外部 Channel 监听入口，不是 Web Chat 主动对话。",
+		fmt.Sprintf("Channel provider: %s", provider),
+	}
+	if scopeLabel != "" || conversationID != "" {
+		lines = append(lines, fmt.Sprintf("External conversation: %s (%s)", scopeLabel, conversationID))
+	}
+	if scopeID != "" {
+		lines = append(lines, fmt.Sprintf("External scope id: %s", scopeID))
+	}
+	if senderName != "" || senderID != "" {
+		lines = append(lines, fmt.Sprintf("Sender: %s (%s)", senderName, senderID))
+	}
+	lines = append(lines, "回复将写入 Channel Outbox，并按该 Channel 策略审批或发送。")
+	return strings.Join(lines, "\n")
+}
+
+func stringValue(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case *string:
+		if typed == nil {
+			return ""
+		}
+		return strings.TrimSpace(*typed)
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
 }

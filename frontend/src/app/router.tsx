@@ -94,6 +94,14 @@ export const router = createBrowserRouter([
         path: "channels/:connectionId",
         element: <ChannelsPage />
       },
+      {
+        path: "channels/:connectionId/:section",
+        element: <ChannelsPage />
+      },
+      {
+        path: "channels/:connectionId/sessions/:externalConversationId",
+        element: <ChannelsPage />
+      },
       { path: "workspace", element: <WorkspacePage /> },
       { path: "logs", element: <PlaceholderPage pageKey="logs" /> }
     ]

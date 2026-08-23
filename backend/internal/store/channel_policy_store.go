@@ -79,3 +79,18 @@ func (s *ChannelStore) ListPolicies(ctx context.Context, userID, connectionID st
 	}
 	return policies, rows.Err()
 }
+
+func (s *ChannelStore) DeletePolicy(ctx context.Context, userID, connectionID, policyID string) error {
+	commandTag, err := s.db.Exec(ctx, `
+		UPDATE channel_policies
+		SET status = 'deleted', updated_at = NOW()
+		WHERE id = $1 AND user_id = $2 AND channel_connection_id = $3 AND status = 'active'
+	`, policyID, userID, connectionID)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

@@ -9,7 +9,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("record not found")
+var (
+	ErrNotFound                  = errors.New("record not found")
+	ErrInvalidInput              = errors.New("invalid input")
+	ErrConversationReadonlyInWeb = errors.New("channel conversation is readonly in web chat")
+)
 
 type User struct {
 	ID           string     `json:"id"`

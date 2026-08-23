@@ -25,9 +25,19 @@ export function ChatPage() {
   const { t } = useTranslation();
 
   const conversationsQuery = useConversations();
-  const messagesQuery = useMessages(conversationId);
+  const webConversations = (conversationsQuery.data ?? []).filter(
+    (conversation) => !conversation.source || conversation.source === "web_chat"
+  );
+  const activeWebConversation = webConversations.find(
+    (conversation) => conversation.id === conversationId
+  );
+  const isReadonlyRoute = Boolean(
+    conversationId && !conversationsQuery.isLoading && !activeWebConversation
+  );
+  const activeConversationID = activeWebConversation?.id;
+  const messagesQuery = useMessages(activeConversationID);
   const createConversationMutation = useCreateConversation();
-  const sendMessageMutation = useSendMessage(conversationId ?? "");
+  const sendMessageMutation = useSendMessage(activeConversationID ?? "");
 
   function handleCreate(title: string) {
     createConversationMutation.mutate(
@@ -42,13 +52,13 @@ export function ChatPage() {
   }
 
   function handleSend(content: string) {
-    if (!conversationId) {
+    if (!activeConversationID) {
       return;
     }
     sendMessageMutation.mutate(content, {
       onSuccess: (result) => {
         queryClient.setQueryData<Message[]>(
-          messagesQueryKey(conversationId),
+          messagesQueryKey(activeConversationID),
           (previous = []) => [
             ...previous,
             result.user_message,
@@ -56,7 +66,7 @@ export function ChatPage() {
           ]
         );
         void queryClient.invalidateQueries({
-          queryKey: messagesQueryKey(conversationId)
+          queryKey: messagesQueryKey(activeConversationID)
         });
         void queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
       }
@@ -80,8 +90,8 @@ export function ChatPage() {
   return (
     <section className="grid h-[calc(100vh-6.5rem)] min-h-[620px] overflow-hidden rounded-lg border border-ink-200 bg-ink-50 shadow-soft lg:grid-cols-[320px_1fr]">
       <ConversationList
-        activeConversationID={conversationId}
-        conversations={conversationsQuery.data ?? []}
+        activeConversationID={activeConversationID}
+        conversations={webConversations}
         isCreating={createConversationMutation.isPending}
         isLoading={conversationsQuery.isLoading}
         onCreate={handleCreate}
@@ -91,11 +101,15 @@ export function ChatPage() {
         <header className="flex h-16 shrink-0 items-center justify-between border-b border-ink-200 bg-white px-5">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold text-ink-900">
-              {currentTitle(conversationsQuery.data ?? [], conversationId) ??
+              {isReadonlyRoute
+                ? t("chat.header.readonlyTitle")
+                : currentTitle(webConversations, conversationId) ??
                 t("chat.header.noConversation")}
             </h1>
             <p className="text-sm text-ink-500">
-              {conversationId
+              {isReadonlyRoute
+                ? t("chat.header.readonlyDescription")
+                : activeConversationID
                 ? t("chat.header.activeDescription")
                 : t("chat.header.emptyDescription")}
             </p>
@@ -126,16 +140,22 @@ export function ChatPage() {
           </div>
         )}
 
+        {isReadonlyRoute && (
+          <div className="border-b border-ink-200 bg-amber-500/10 px-5 py-3 text-sm leading-6 text-amber-700">
+            {t("chat.header.readonlyDescription")}
+          </div>
+        )}
+
         <div className="min-h-0 flex-1 overflow-y-auto">
           <MessageList
-            hasConversation={Boolean(conversationId)}
+            hasConversation={Boolean(activeConversationID)}
             isLoading={messagesQuery.isLoading}
             messages={messagesQuery.data ?? []}
           />
         </div>
 
         <MessageComposer
-          disabled={!conversationId}
+          disabled={!activeConversationID}
           isSending={sendMessageMutation.isPending}
           onSend={handleSend}
         />

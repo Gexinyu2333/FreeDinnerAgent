@@ -6,8 +6,8 @@
   "auth": {
     "heroEyebrow": "FreeDinnerAgent",
     "heroTitle": "Bring your agent, memory, tools, and channels into one console.",
-    "heroDescription": "Start with auth, configuration, and Web Chat, then grow into memory, scheduled jobs, QQ channels, and workspace actions.",
-    "localFirstHint": "Development backend: http://localhost:8080",
+    "heroDescription": "A personal AI assistant workspace for conversations, long-term memory, model settings, scheduled jobs, and external channels.",
+    "localFirstHint": "Local-first: configuration and memory stay in your backend service.",
     "logout": "Log out",
     "fields": {
       "username": "Username",
@@ -53,9 +53,17 @@
     "reset": "Reset",
     "refresh": "Refresh",
     "retry": "Retry",
+    "approved": "Approved",
+    "created": "Created",
+    "deleted": "Deleted",
+    "rejected": "Rejected",
+    "sent": "Sent",
     "save": "Save",
+    "saved": "Saved",
     "saving": "Saving",
-    "search": "Search"
+    "search": "Search",
+    "showSecret": "Show value",
+    "hideSecret": "Hide value"
   },
   "memory": {
     "description": "Maintain profile memories, inspect what context retrieval injects, and handle Dreaming candidate insights.",
@@ -381,6 +389,11 @@
     "connection": {
       "create": "Create connection",
       "created": "Channel connection created",
+      "deleted": "Channel connection deleted",
+      "deleteConfirm": "Delete connection \"{{name}}\"?",
+      "edit": "Edit connection",
+      "save": "Save connection",
+      "updated": "Channel connection saved",
       "accessToken": "NapCat access token",
       "messageApiUrl": "NapCat HTTP API URL for /send_msg",
       "eventStreamUrl": "NapCat HTTP SSE server URL for future event listening",
@@ -393,8 +406,14 @@
       "noEndpoints": "No endpoints configured",
       "noExternalAccount": "No external account",
       "provider": "Provider",
+      "setupDescription": "Edit connection details in a dialog so endpoints, tokens, and secrets do not permanently crowd the control center.",
       "webhookCallbackUrl": "FreeDinnerAgent webhook URL configured in NapCat HTTP client",
       "webhookSecret": "Webhook secret / token"
+    },
+    "endpointType": {
+      "event_stream": "Event stream",
+      "message_api": "Message API",
+      "webhook_callback": "Webhook callback"
     },
     "connections": {
       "title": "Connections",
@@ -414,11 +433,29 @@
       "inbox": "Inbox",
       "outbox": "Outbox"
     },
+    "sections": {
+      "overview": "Overview",
+      "setup": "Setup",
+      "policies": "Policies",
+      "inbox": "Inbox",
+      "outbox": "Outbox",
+      "sessions": "Sessions",
+      "logs": "Logs"
+    },
+    "overview": {
+      "latestInbox": "Latest inbox",
+      "latestOutbox": "Latest outbox",
+      "sessions": "External sessions"
+    },
     "policy": {
       "allowMemoryWrite": "Allow memory writes",
       "allowToolUse": "Allow tool use",
+      "create": "Create policy",
       "current": "Current policies",
       "empty": "No policies yet. Creating a connection will add default private chat and group chat policies.",
+      "deleteConfirm": "Delete policy \"{{name}}\"?",
+      "deleted": "Channel policy deleted",
+      "editTitle": "Edit policy",
       "externalScopeId": "External scope ID, blank for default policy",
       "globalScope": "Default scope",
       "rateLimit": "{{count}} per minute",
@@ -440,6 +477,7 @@
     },
     "inbox": {
       "noText": "No text content",
+      "rawPayload": "View raw event",
       "triggered": "Triggered",
       "empty": {
         "description": "Normalized inbox events will appear here after external webhooks arrive.",
@@ -451,6 +489,11 @@
       "cancel": "Cancel",
       "requiresApproval": "Needs approval",
       "send": "Send",
+      "success": {
+        "approve": "Outbox approved",
+        "cancel": "Outbox cancelled",
+        "send": "Outbox sent"
+      },
       "confirm": {
         "cancel": "Cancel this outbox draft?",
         "send": "Send this approved outbox message?"
@@ -472,6 +515,24 @@
       "empty": {
         "description": "External private chats or groups will appear here after they are bound to web conversations.",
         "title": "No external conversations"
+      }
+    },
+    "sessions": {
+      "createOutboxDraft": "Create outbound draft",
+      "draftCreated": "Outbound draft created",
+      "noMessages": "This external session has no transcript messages yet.",
+      "outboxDraftDescription": "This does not send directly to the external platform. It creates an Outbox draft that follows the channel policy.",
+      "outboxDraftPlaceholder": "Write a reply draft for this external session",
+      "outboxDraftTitle": "Human takeover reply",
+      "readonly": "Read-only",
+      "readonlyDescription": "This is an external Channel listener session. Reply through Outbox instead of the Web Chat composer.",
+      "selectDescription": "Select a QQ group, private chat, or future external session to inspect its read-only transcript.",
+      "selectTitle": "Select an external session"
+    },
+    "logs": {
+      "empty": {
+        "description": "Inbound events, outbound drafts, and send results will appear here as a debug timeline.",
+        "title": "No channel logs"
       }
     }
   },
@@ -588,6 +649,8 @@
       "activeDescription": "Web Chat actively triggers the Agent Loop",
       "emptyDescription": "Create a conversation to start chatting",
       "noConversation": "No conversation selected",
+      "readonlyDescription": "This route is not a Web Chat conversation. External channel sessions belong in Channels, where transcripts are read-only and outbound replies go through Outbox drafts.",
+      "readonlyTitle": "External channel session is read-only",
       "waitingForAssistant": "Agent is generating a reply"
     },
     "sidebar": {

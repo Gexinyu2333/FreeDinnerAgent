@@ -154,13 +154,50 @@ func shouldTriggerAt(event normalizedEvent, policy store.ChannelPolicy, botQQ *s
 		return false, "keyword_missed"
 	default:
 		if event.ScopeType == "group_chat" {
-			if botQQ != nil && strings.Contains(string(event.RawPayload), "[CQ:at,qq="+*botQQ+"]") {
+			if rawPayloadMentionsBot(event.RawPayload, botQQ) {
 				return true, "mention"
 			}
 			return false, "mention_required"
 		}
 		return true, "private_chat"
 	}
+}
+
+func rawPayloadMentionsBot(rawPayload json.RawMessage, configuredBotQQ *string) bool {
+	var payload struct {
+		SelfID     any             `json:"self_id"`
+		RawMessage string          `json:"raw_message"`
+		Message    json.RawMessage `json:"message"`
+	}
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		return false
+	}
+	botQQ := ""
+	if configuredBotQQ != nil {
+		botQQ = strings.TrimSpace(*configuredBotQQ)
+	}
+	if botQQ == "" {
+		botQQ = valueToString(payload.SelfID)
+	}
+	if botQQ == "" {
+		return false
+	}
+	if strings.Contains(payload.RawMessage, "[CQ:at,qq="+botQQ+"]") {
+		return true
+	}
+	var segments []struct {
+		Type string            `json:"type"`
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(payload.Message, &segments); err != nil {
+		return false
+	}
+	for _, segment := range segments {
+		if segment.Type == "at" && strings.TrimSpace(segment.Data["qq"]) == botQQ {
+			return true
+		}
+	}
+	return false
 }
 
 type quietHoursConfig struct {

@@ -25,6 +25,7 @@ import { LoadingState } from "../../../components/ui/LoadingState";
 import { Select } from "../../../components/ui/Select";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Toast } from "../../../components/ui/Toast";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { ApiError } from "../../../lib/errors";
 import { formatDateTime, formatNumber } from "../../../lib/format";
 import {
@@ -105,6 +106,7 @@ const defaultCommandForm: CommandFormState = {
 
 export function WorkspacePage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const statusQuery = useWorkspaceStatus();
   const workspaceMissing =
@@ -151,14 +153,20 @@ export function WorkspacePage() {
   function handleEnable(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     enableMutation.mutate(policyInput(policyForm) as EnableWorkspaceInput, {
-      onSuccess: () => invalidateWorkspace("/")
+      onSuccess: () => {
+        invalidateWorkspace("/");
+        toast.notify(t("workspace.enabled"));
+      }
     });
   }
 
   function handlePolicyUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     policyMutation.mutate(policyInput(policyForm), {
-      onSuccess: () => invalidateWorkspace()
+      onSuccess: () => {
+        invalidateWorkspace();
+        toast.notify(t("workspace.policy.saved"));
+      }
     });
   }
 
@@ -181,6 +189,7 @@ export function WorkspacePage() {
         onSuccess: () => {
           invalidateWorkspace(parentOf(fileForm.path));
           setCurrentPath(parentOf(fileForm.path));
+          toast.notify(t("workspace.files.saved"));
         }
       }
     );
@@ -196,7 +205,10 @@ export function WorkspacePage() {
         timeout_seconds: numberValue(commandForm.timeout_seconds, 10)
       },
       {
-        onSuccess: () => invalidateWorkspace()
+        onSuccess: () => {
+          invalidateWorkspace();
+          toast.notify(t("workspace.commands.finished"));
+        }
       }
     );
   }
@@ -244,13 +256,6 @@ export function WorkspacePage() {
           tone="error"
         />
       )}
-      {enableMutation.isSuccess && <Toast message={t("workspace.enabled")} tone="success" />}
-      {policyMutation.isSuccess && <Toast message={t("workspace.policy.saved")} tone="success" />}
-      {writeMutation.isSuccess && <Toast message={t("workspace.files.saved")} tone="success" />}
-      {commandMutation.isSuccess && (
-        <Toast message={t("workspace.commands.finished")} tone="success" />
-      )}
-
       {!workspaceEnabled ? (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <EmptyState

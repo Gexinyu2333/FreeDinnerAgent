@@ -42,7 +42,7 @@ PostgreSQL
 - 能力市场：展示 MCP、Skills、Tools、Knowledge Base、Channel Adapter 和 System Prompt Template，支持公共/私有、安装、启用到个人 Agent。
 - 任务管理：展示由对话生成的待办事项，支持状态更新。
 - 已安排任务：展示每日简报、每周回顾、跟进监控、提醒等心跳任务，支持启停、立即运行和查看运行记录。
-- 渠道连接：配置 NapCatQQ / OneBot 外部聊天入口，设置私聊/群聊触发策略；微信、Telegram、Discord、飞书等具体 Adapter 归入高级项，只保留通用抽象。
+- 渠道连接：作为独立的 Channel Control Center，配置 NapCatQQ / OneBot 外部聊天入口、监听策略、Inbox、Outbox、Logs 和只读外部会话 transcript；连接表单按 provider metadata 渲染，微信、Telegram、Discord、飞书等具体 Adapter 归入高级项但可通过新增 provider definition 和 adapter 扩展。
 - 知识库页面：上传或录入文档，生成 Semantic Memory，用于 RAG 检索，可选择私有或公共。
 - 登录页面：使用用户名和密码登录，进入后只能查看自己的配置、会话、记忆和任务。
 - 设置页面：配置 OpenAI / OpenAI-compatible API Key、默认模型、系统提示词模板、Embedding 成本开关、Workspace 开关、工具开关和隐私选项；Anthropic provider 字段预留。
@@ -58,7 +58,7 @@ PostgreSQL
 - 当前用户的 Agent 配置和模型供应商配置
 - 当前用户的系统提示词模板、模板版本和变量配置
 - 当前用户的心跳任务配置和最近运行状态
-- 当前用户的渠道连接、外部会话映射和群聊触发策略
+- 当前用户的渠道连接、外部会话映射、只读 transcript、群聊触发策略和 outbox 审批状态
 - 当前用户的 Workspace 状态、配额和最近文件/命令事件
 
 ## 4. 后端模块设计
@@ -376,8 +376,11 @@ MCP、Skills、Tools、Knowledge Base、Channel Adapter 和 System Prompt Templa
 核心原则：
 
 - 外部平台接入统一落到 `channel_provider_definitions`、`channel_connections`、`external_conversations`、`channel_inbox_events`、`channel_outbox_messages` 和 `channel_policies`。
-- Agent 内部只面对统一的 `conversations` 和 `messages`，不关心消息来自 QQ 还是飞书。
+- `channel_provider_definitions.metadata.form` 描述前端连接表单、endpoint 模板和 secret/config 映射，避免在前端把 NapCatQQ 字段写死成唯一平台。
+- `conversations.source` 区分 `web_chat`、`channel` 和 `scheduled_job`。Web Chat API 只返回 `web_chat` 会话，并拒绝向 `channel` 会话直接发送消息。
+- Agent 内部只面对统一的 `conversations` 和 `messages`，但入口语义由 `source`、`channel_connection_id` 和 `external_conversation_id` 保留。
 - Channel Adapter 负责收消息和发消息；MCP/Tool 负责平台上的额外动作，例如查群成员、取最近消息、发送富文本。当前 QQ MCP tools 仍未实现，NapCatQQ 发送先由 Channel Adapter 直接完成。
+- 外部私聊、群聊、频道或线程在 Channels 页面作为只读 transcript 展示；人工接管回复时从对应 Channel Session 创建 Outbox 草稿，再按策略审批或发送，不走 Web Chat send。
 - 群聊默认 `mention_only`，私聊可自动回复。
 - 社交辅助默认先生成草稿或要求审批，避免自动发送敏感内容。
 
