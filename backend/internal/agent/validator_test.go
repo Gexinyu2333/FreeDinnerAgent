@@ -43,6 +43,28 @@ func TestValidateActionDoesNotTreatMalformedJSONAsPlainText(t *testing.T) {
 	}
 }
 
+func TestValidateActionRepairsRespondContentShape(t *testing.T) {
+	action, result := ValidateAction(`{"action":"respond","content":"我是 FreeDinnerAgent 的上下文引擎。"}`, nil)
+	if !result.Passed || !result.Repaired {
+		t.Fatalf("expected action/respond to be repaired, got %#v", result)
+	}
+	if action.Type != ActionFinalAnswer || action.Answer != "我是 FreeDinnerAgent 的上下文引擎。" {
+		t.Fatalf("unexpected action: %#v", action)
+	}
+}
+
+func TestValidateActionRepairsAlternateToolCallShape(t *testing.T) {
+	action, result := ValidateAction(`{"action":"call_tool","tool":"create_task","args":{"title":"测试"}}`, []ToolDescriptor{
+		{Name: "create_task", ParameterSchema: json.RawMessage(`{}`)},
+	})
+	if !result.Passed || !result.Repaired {
+		t.Fatalf("expected alternate tool call to be repaired, got %#v", result)
+	}
+	if action.Type != ActionToolCall || action.ToolName != "create_task" {
+		t.Fatalf("unexpected action: %#v", action)
+	}
+}
+
 func TestValidateActionRejectsUnavailableTool(t *testing.T) {
 	_, result := ValidateAction(`{"type":"tool_call","tool_name":"web_search","arguments":{}}`, []ToolDescriptor{
 		{Name: "create_task", ParameterSchema: json.RawMessage(`{}`)},

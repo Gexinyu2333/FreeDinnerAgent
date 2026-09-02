@@ -21,6 +21,13 @@ func ValidateAction(raw string, tools []ToolDescriptor) (Action, ValidationResul
 		return Action{}, ValidationResult{Passed: false, Reason: err.Error()}
 	}
 	if strings.TrimSpace(action.Type) == "" {
+		if normalized, output, ok := normalizeAlternateAction(raw); ok {
+			action = normalized
+			repaired = true
+			repairedOutput = output
+		}
+	}
+	if strings.TrimSpace(action.Type) == "" {
 		return Action{}, ValidationResult{Passed: false, Reason: "missing action type", Repaired: repaired, RepairOutput: repairedOutput}
 	}
 
@@ -66,6 +73,86 @@ func naturalLanguageFinalAnswer(raw string) string {
 		return ""
 	}
 	return trimmed
+}
+
+func normalizeAlternateAction(raw string) (Action, string, bool) {
+	candidate := extractJSONObject(raw)
+	if candidate == "" {
+		candidate = strings.TrimSpace(raw)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(candidate), &payload); err != nil {
+		return Action{}, "", false
+	}
+
+	kind := rawString(payload["action"])
+	if kind == "" {
+		kind = rawString(payload["intent"])
+	}
+	if kind == "" {
+		return Action{}, "", false
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+
+	var action Action
+	switch kind {
+	case "respond", "reply", "answer", "final", "final_answer":
+		answer := firstRawString(payload, "answer", "content", "message", "text")
+		if strings.TrimSpace(answer) == "" {
+			return Action{}, "", false
+		}
+		action = Action{Type: ActionFinalAnswer, Answer: strings.TrimSpace(answer)}
+	case "ask", "ask_user", "clarify", "clarification":
+		question := firstRawString(payload, "question", "content", "message", "text")
+		if strings.TrimSpace(question) == "" {
+			return Action{}, "", false
+		}
+		action = Action{Type: ActionAskUser, Question: strings.TrimSpace(question)}
+	case "memory_search", "search_memory":
+		query := firstRawString(payload, "query", "content", "text")
+		if strings.TrimSpace(query) == "" {
+			return Action{}, "", false
+		}
+		action = Action{Type: ActionMemorySearch, Query: strings.TrimSpace(query)}
+	case "tool", "tool_call", "call_tool":
+		toolName := firstRawString(payload, "tool_name", "tool", "name")
+		if strings.TrimSpace(toolName) == "" {
+			return Action{}, "", false
+		}
+		args := payload["arguments"]
+		if len(args) == 0 {
+			args = payload["args"]
+		}
+		if len(args) == 0 {
+			args = json.RawMessage(`{}`)
+		}
+		action = Action{Type: ActionToolCall, ToolName: strings.TrimSpace(toolName), Arguments: args}
+	default:
+		return Action{}, "", false
+	}
+
+	output, _ := json.Marshal(action)
+	return action, string(output), true
+}
+
+func firstRawString(payload map[string]json.RawMessage, keys ...string) string {
+	for _, key := range keys {
+		if value := rawString(payload[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func rawString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func ValidateFinalAnswerContract(answer string, observations []Observation) ValidationResult {
