@@ -11,6 +11,13 @@ var ErrInvalidAction = errors.New("invalid agent action")
 func ValidateAction(raw string, tools []ToolDescriptor) (Action, ValidationResult) {
 	action, repaired, repairedOutput, err := parseAction(raw)
 	if err != nil {
+		if answer := naturalLanguageFinalAnswer(raw); answer != "" {
+			return Action{Type: ActionFinalAnswer, Answer: answer}, ValidationResult{
+				Passed:       true,
+				Repaired:     true,
+				RepairOutput: answer,
+			}
+		}
 		return Action{}, ValidationResult{Passed: false, Reason: err.Error()}
 	}
 	if strings.TrimSpace(action.Type) == "" {
@@ -45,6 +52,20 @@ func ValidateAction(raw string, tools []ToolDescriptor) (Action, ValidationResul
 	}
 
 	return action, ValidationResult{Passed: true, Repaired: repaired, RepairOutput: repairedOutput}
+}
+
+func naturalLanguageFinalAnswer(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.Contains(trimmed, "{") || strings.Contains(trimmed, "}") {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(trimmed), `"type"`) || strings.Contains(strings.ToLower(trimmed), "tool_call") {
+		return ""
+	}
+	return trimmed
 }
 
 func ValidateFinalAnswerContract(answer string, observations []Observation) ValidationResult {

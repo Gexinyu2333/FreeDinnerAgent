@@ -26,6 +26,23 @@ func TestValidateActionRepairsFencedJSON(t *testing.T) {
 	}
 }
 
+func TestValidateActionTreatsPlainTextAsFinalAnswer(t *testing.T) {
+	action, result := ValidateAction("你好，我是你的个人 Agent。", nil)
+	if !result.Passed || !result.Repaired {
+		t.Fatalf("expected plain text to be repaired as final answer, got %#v", result)
+	}
+	if action.Type != ActionFinalAnswer || action.Answer != "你好，我是你的个人 Agent。" {
+		t.Fatalf("unexpected action: %#v", action)
+	}
+}
+
+func TestValidateActionDoesNotTreatMalformedJSONAsPlainText(t *testing.T) {
+	_, result := ValidateAction(`{"type":"final_answer","answer":`, nil)
+	if result.Passed {
+		t.Fatal("expected malformed JSON-looking output to fail validation")
+	}
+}
+
 func TestValidateActionRejectsUnavailableTool(t *testing.T) {
 	_, result := ValidateAction(`{"type":"tool_call","tool_name":"web_search","arguments":{}}`, []ToolDescriptor{
 		{Name: "create_task", ParameterSchema: json.RawMessage(`{}`)},
