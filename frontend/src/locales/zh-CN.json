@@ -497,11 +497,14 @@
       "save": "保存策略",
       "saved": "Channel 策略已保存",
       "title": "策略配置",
-      "triggerKeywords": "关键词，英文逗号或换行分隔",
+      "triggerKeywords": "关键词，中英文逗号或换行分隔",
       "mode": {
         "auto_reply": "自动回复",
         "keyword": "关键词触发",
         "mention_only": "@ 触发",
+        "mention_or_keyword": "@ 或关键词触发",
+        "disabled": "关闭",
+        "silent_listen": "仅监听，不回复",
         "off": "关闭"
       },
       "scope": {

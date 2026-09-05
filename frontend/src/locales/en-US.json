@@ -502,6 +502,9 @@
         "auto_reply": "Auto reply",
         "keyword": "Keyword",
         "mention_only": "Mention only",
+        "mention_or_keyword": "Mention or keyword",
+        "disabled": "Disabled",
+        "silent_listen": "Listen without replying",
         "off": "Off"
       },
       "scope": {

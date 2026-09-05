@@ -604,7 +604,7 @@ CREATE TABLE IF NOT EXISTS channel_policies (
     scope_type VARCHAR(40) NOT NULL CHECK (scope_type IN ('private_chat', 'group_chat', 'all')),
     external_scope_id VARCHAR(160),
     agent_config_id UUID REFERENCES user_agent_configs(id) ON DELETE SET NULL,
-    mode VARCHAR(40) NOT NULL DEFAULT 'mention_only' CHECK (mode IN ('disabled', 'silent_listen', 'mention_only', 'keyword', 'auto_reply')),
+    mode VARCHAR(40) NOT NULL DEFAULT 'mention_only' CHECK (mode IN ('disabled', 'silent_listen', 'mention_only', 'mention_or_keyword', 'keyword', 'auto_reply')),
     trigger_keywords TEXT[] NOT NULL DEFAULT '{}',
     allow_memory_write BOOLEAN NOT NULL DEFAULT TRUE,
     allow_tool_use BOOLEAN NOT NULL DEFAULT TRUE,

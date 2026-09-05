@@ -4,6 +4,7 @@ import {
   Edit3,
   MessageSquareMore,
   PlugZap,
+  Plus,
   RotateCcw,
   RefreshCw,
   Send,
@@ -354,7 +355,7 @@ export function ChannelsPage() {
         allow_memory_write: policyForm.allow_memory_write,
         allow_tool_use: policyForm.allow_tool_use,
         require_approval_for_outbound: policyForm.require_approval_for_outbound,
-        rate_limit_per_minute: Number(policyForm.rate_limit_per_minute) || 6,
+        rate_limit_per_minute: policyForm.rate_limit_per_minute === "" ? 6 : Number(policyForm.rate_limit_per_minute),
         rate_limit_policy: rateLimitPolicy
       },
       {
@@ -849,25 +850,23 @@ function ConnectionList({
   if (loading) {
     return <LoadingState />;
   }
-  if (connections.length === 0) {
-    return (
-      <EmptyState
-        description={t("channels.connections.empty.description")}
-        icon={<PlugZap className="h-8 w-8" />}
-        title={t("channels.connections.empty.title")}
-      />
-    );
-  }
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-ink-900">
           {t("channels.connections.title")}
         </h2>
-        <Button className="h-8 px-3" onClick={onCreate} variant="secondary">
+        <Button className="h-8 px-3" icon={<Plus className="h-4 w-4" />} onClick={onCreate} variant="secondary">
           {t("channels.connection.create")}
         </Button>
       </div>
+      {connections.length === 0 && (
+        <EmptyState
+          description={t("channels.connections.empty.description")}
+          icon={<PlugZap className="h-8 w-8" />}
+          title={t("channels.connections.empty.title")}
+        />
+      )}
       {connections.map((connection) => (
         <button
           className={[
@@ -1077,10 +1076,13 @@ function PolicyForm({
         >
           <option value="auto_reply">{t("channels.policy.mode.auto_reply")}</option>
           <option value="mention_only">{t("channels.policy.mode.mention_only")}</option>
+          <option value="mention_or_keyword">{t("channels.policy.mode.mention_or_keyword")}</option>
           <option value="keyword">{t("channels.policy.mode.keyword")}</option>
-          <option value="off">{t("channels.policy.mode.off")}</option>
+          <option value="disabled">{t("channels.policy.mode.disabled")}</option>
+          <option value="silent_listen">{t("channels.policy.mode.silent_listen")}</option>
         </Select>
-        <Input
+        <Textarea
+          rows={2}
           onChange={(event) =>
             onChange({ ...form, trigger_keywords: event.target.value })
           }
@@ -1844,7 +1846,7 @@ function parseJSONObject(value: string): Record<string, unknown> {
 
 function splitKeywords(value: string) {
   return value
-    .split(/[,\n]/)
+    .split(/[,，\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }

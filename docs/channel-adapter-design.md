@@ -161,6 +161,7 @@ NapCatQQ send_msg API 发送
 - `disabled`：不监听。
 - `silent_listen`：只记录和总结，不主动回复。
 - `mention_only`：只有 @Agent 时回复。
+- `mention_or_keyword`：@Agent 或命中任一关键词时回复；同时命中也只触发一次，共用限频、静默时段与审批配置。
 - `keyword`：命中特定关键词时回复。
 - `auto_reply`：自动回复，但需要严格限频。
 
@@ -301,7 +302,8 @@ NapCatQQ MCP Server
 - 支持创建用户级 `channel_connection`，敏感配置通过加密 JSON 保存。
 - 创建连接时默认生成私聊 `auto_reply` 策略和群聊 `mention_only` 策略。
 - Webhook 已支持 OneBot 私聊、群聊事件规范化，群聊会移除 Bot mention。
-- 已支持 `disabled`、`silent_listen`、`mention_only`、`keyword`、`auto_reply` 触发策略。
+- 已支持 `disabled`、`silent_listen`、`mention_only`、`mention_or_keyword`、`keyword`、`auto_reply` 触发策略。同一群聊保留一条策略，在编辑时选择组合触发模式，无需重复创建策略。
+- Channels 在尚无连接时也提供创建连接入口。已有数据库执行 `database/migrations/20260905_channel_combined_trigger.sql` 扩展策略约束；新数据库的 `init.sql` 已同步。
 - `quiet_hours` 已生效，静默时段内不会触发 Agent。
 - 入站事件会先写入 `channel_inbox_events`，再根据策略决定是否创建本地 conversation/message。
 - 触发后会创建或复用 `external_conversations`，并把 QQ 消息写入本地 `messages`。

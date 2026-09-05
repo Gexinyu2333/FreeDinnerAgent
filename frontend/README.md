@@ -26,6 +26,8 @@
 - Workspace：启用 workspace、隔离策略、文件列表、文件读写、受限命令和命令历史
 - Logs：开发占位页，后续可扩展为运行日志和审计中心
 
+Channels 在空连接列表中提供“创建连接”按钮；单个群聊策略可选择“@ 或关键词触发”，命中任一条件即可回复。关键词支持中英文逗号和换行分隔。
+
 Web Chat 和 Channel Adapter 是两个入口：Web Chat 由用户在当前会话主动输入触发 Agent Loop；Channel Adapter 由外部消息监听触发，每个连接默认绑定一个专用监听/主控会话。
 
 ## 本地运行
@@ -72,3 +74,7 @@ npm run build
 ## NapCat
 
 NapCat 连接的 URL 类配置统一保存为 endpoint：`message_api`、`event_stream`、`webhook_callback`。部署和调试说明见 [../backend/NAPCAT.md](../backend/NAPCAT.md)。
+
+## Channel 回归测试
+
+启动前端后，在已有 Playwright 和 Chrome 的环境运行 `FRONTEND_URL=http://127.0.0.1:5174 node tests/channels-smoke.mjs`。可通过 `PLAYWRIGHT_MODULE` 指定已有 Playwright 模块路径，`BROWSER_CHANNEL` 指定浏览器。测试拦截全部 API，不修改真实数据；覆盖桌面/手机空列表创建、组合触发策略保存与编辑、零限频和关闭策略。

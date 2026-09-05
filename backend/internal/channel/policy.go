@@ -145,11 +145,17 @@ func shouldTriggerAt(event normalizedEvent, policy store.ChannelPolicy, botQQ *s
 		return false, policy.Mode
 	case "auto_reply":
 		return true, "auto_reply"
-	case "keyword":
+	case "keyword", "mention_or_keyword":
+		if policy.Mode == "mention_or_keyword" && rawPayloadMentionsBot(event.RawPayload, botQQ) {
+			return true, "mention"
+		}
 		for _, keyword := range policy.TriggerKeywords {
 			if keyword != "" && strings.Contains(event.Text, keyword) {
 				return true, "keyword"
 			}
+		}
+		if policy.Mode == "mention_or_keyword" {
+			return false, "mention_or_keyword_missed"
 		}
 		return false, "keyword_missed"
 	default:
@@ -274,7 +280,7 @@ func normalizeScopeType(value string) string {
 
 func normalizeMode(value string) string {
 	switch strings.TrimSpace(value) {
-	case "disabled", "silent_listen", "mention_only", "keyword", "auto_reply":
+	case "disabled", "silent_listen", "mention_only", "mention_or_keyword", "keyword", "auto_reply":
 		return strings.TrimSpace(value)
 	default:
 		return "mention_only"
